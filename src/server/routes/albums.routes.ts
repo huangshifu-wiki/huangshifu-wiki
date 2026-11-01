@@ -25,11 +25,13 @@ import {
   softDeleteData,
   allocateNumericSlug,
   isNumericSlug,
+  buildTagFilterWhere,
 } from '../utils'
 import { MediaAssetRequestError, releaseMediaAsset } from '../services/mediaAssetService'
 import type { AuthenticatedRequest } from '../types'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { normalizeStringListInput } from '../../lib/musicCredits'
+import { normalizeTagFilter } from '../../lib/tagFilters'
 
 const router = createRouter()
 
@@ -117,25 +119,27 @@ async function deleteAlbumCoverById(albumDocId: string, coverId: string) {
 router.get('/', async (req: AuthenticatedRequest, res) => {
   try {
     const platform = parseMusicPlatform(req.query.platform)
-    const tag = typeof req.query.tag === 'string' ? req.query.tag.trim() : ''
+    const filter = normalizeTagFilter(req.query.tag, req.query.tagMode)
     const limit = parseInteger(req.query.limit, 20, { min: 1, max: 100 })
     const page = parseInteger(req.query.page, 1, { min: 1 })
     const skip = (page - 1) * limit
     const sortOrder = parseAlbumListSortOrder(req.query.sortOrder)
 
-    const where = {
-      deletedAt: null,
-      ...(platform ? { externalSources: { some: { platform } } } : {}),
-      ...(tag ? { tags: { array_contains: [tag] } } : {}),
-    }
-
-    if (!req.authUser) {
-      const cacheKey = `album_list:${platform || 'all'}:${sortOrder}:${page}:${limit}:${JSON.stringify(tag)}`
+    const cacheKey = !req.authUser
+      ? `album_list:${platform || 'all'}:${sortOrder}:${page}:${limit}:${JSON.stringify([filter.tags, filter.mode])}`
+      : null
+    if (cacheKey) {
       const cached = enhancedCache.get(cacheKey)
       if (cached) {
         res.json(cached)
         return
       }
+    }
+
+    const where = {
+      deletedAt: null,
+      ...(platform ? { externalSources: { some: { platform } } } : {}),
+      ...buildTagFilterWhere(filter),
     }
 
     const [albums, total] = await Promise.all([
@@ -192,8 +196,7 @@ router.get('/', async (req: AuthenticatedRequest, res) => {
       ...createPaginationMeta(total, page, limit, albums.length),
     }
 
-    if (!req.authUser) {
-      const cacheKey = `album_list:${platform || 'all'}:${sortOrder}:${page}:${limit}:${JSON.stringify(tag)}`
+    if (cacheKey) {
       enhancedCache.set(cacheKey, result, 120)
     }
 

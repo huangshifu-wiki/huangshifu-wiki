@@ -93,6 +93,42 @@ describe('Events API - 活动标签筛选', () => {
     expect(response.body.total).toBe(1)
   })
 
+  it.each(['desc', 'upcoming'] as const)(
+    '%s 多标签并交集在分页前生效并排除已删除活动',
+    async (sortOrder) => {
+      const first = await createEvent('Event Tags Test Multi A', ['古风'], null, '2025-01-01')
+      const second = await createEvent('Event Tags Test Multi B', ['现场'], null, '2025-01-02')
+      const both = await createEvent(
+        'Event Tags Test Multi C',
+        ['古风', '现场'],
+        null,
+        '2025-01-03'
+      )
+      await createEvent('Event Tags Test Multi Deleted', ['古风', '现场'], new Date())
+      const union = await request(app)
+        .get('/api/events')
+        .query({ tag: ['古风', '现场', '古风'], sortOrder })
+        .expect(200)
+      expect(union.body.total).toBe(3)
+      expect(union.body.events.map((item: { id: string }) => item.id).sort()).toEqual(
+        [first.id, second.id, both.id].sort()
+      )
+      const intersection = await request(app)
+        .get('/api/events')
+        .query({ tag: ['古风', '现场'], tagMode: 'all', sortOrder, limit: 1 })
+        .expect(200)
+      expect(intersection.body.total).toBe(1)
+      expect(intersection.body.events.map((item: { id: string }) => item.id)).toEqual([both.id])
+    }
+  )
+
+  it('多标签中任一标签超长时拒绝请求', async () => {
+    await request(app)
+      .get('/api/events')
+      .query({ tag: ['现场', '长'.repeat(51)], tagMode: 'all' })
+      .expect(400)
+  })
+
   it('默认按活动时间倒序排列，也支持显式正序', async () => {
     await createEvent('Event Tags Test Old', ['排序'], null, '2024-01-01')
     await createEvent('Event Tags Test New', ['排序'], null, '2024-02-01')

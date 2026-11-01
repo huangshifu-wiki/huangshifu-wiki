@@ -7,6 +7,7 @@ import { validateBody, eventWriteSchema } from '../schemas'
 import type { AuthenticatedRequest } from '../types'
 import { prisma } from '../prisma'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
+import { normalizeTagFilter } from '../../lib/tagFilters'
 import {
   allocateNumericSlug,
   parsePagination,
@@ -18,6 +19,7 @@ import {
   invalidateTicketListingCaches,
   isNumericSlug,
   logger,
+  buildTagFilterWhere,
 } from '../utils'
 import {
   cleanupUnusedMediaAssetById,
@@ -132,12 +134,6 @@ function isString(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.length > 0
 }
 
-function parseEventTagQuery(value: unknown) {
-  if (typeof value !== 'string') return ''
-  const tag = value.trim()
-  return tag.length > CONTENT_LIMITS.event.tag ? null : tag
-}
-
 type EventListSortOrder = 'asc' | 'desc' | 'upcoming'
 
 function parseEventSortOrder(value: unknown): EventListSortOrder {
@@ -238,15 +234,15 @@ router.get(
   '/',
   asyncHandler(async (req, res) => {
     const { limit, page, offset: skip } = parsePagination(req.query)
-    const tag = parseEventTagQuery(req.query.tag)
+    const filter = normalizeTagFilter(req.query.tag, req.query.tagMode)
     const sortOrder = parseEventSortOrder(req.query.sortOrder)
-    if (tag === null) {
+    if (filter.tags.some((tag) => tag.length > CONTENT_LIMITS.event.tag)) {
       res.status(400).json({ error: `标签不能超过${CONTENT_LIMITS.event.tag}个字符` })
       return
     }
     const where: Prisma.EventWhereInput = {
       deletedAt: null,
-      ...(tag ? { tags: { array_contains: [tag] } } : {}),
+      ...buildTagFilterWhere(filter),
     }
     const [total, events] = await Promise.all([
       prisma.event.count({ where }),

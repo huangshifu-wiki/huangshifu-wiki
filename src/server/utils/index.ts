@@ -65,6 +65,7 @@ export {
 } from './sharpSafe'
 export { normalizeLyricStorage } from './lyrics'
 export { allocateUserPublicId, isUserPublicId } from './userPublicId'
+export { buildTagFilterWhere } from './tagFilters'
 
 export {
   buildUniqueDisplayNameFallback,

@@ -95,6 +95,98 @@ describe('Music API - 音乐接口测试', () => {
     await cleanupMusicFixtures()
   })
 
+  it.each(['music', 'albums'] as const)(
+    '%s 多标签集合、分页与匿名缓存保持一致',
+    async (resource) => {
+      const suffix = nextTestNumericSlug()
+      const tags = [`古风${suffix}`, `现场${suffix}`]
+      const punctuationTag = `古风,民谣${suffix}`
+      const prefix =
+        resource === 'music' ? 'Release Date Sort Test Song Multi' : 'Album Tags Test Multi'
+      const records = await Promise.all(
+        [[tags[0]], [tags[1]], tags, [punctuationTag]].map((itemTags, index) => {
+          const data = {
+            slug: nextTestNumericSlug(),
+            title: `${prefix} ${index}`,
+            tags: itemTags,
+            releaseDate: new Date(`2025-01-0${index + 1}T00:00:00Z`),
+          }
+          return resource === 'music'
+            ? prisma.musicTrack.create({ data: { ...data, artists: ['集合测试'] } })
+            : prisma.album.create({ data: { ...data, artist: '集合测试' } })
+        })
+      )
+      const key = resource === 'music' ? 'songs' : 'albums'
+      for (const [mode, expected] of [
+        [undefined, 3],
+        ['all', 1],
+        ['any', 3],
+      ] as const) {
+        const response = await request(app)
+          .get(`/api/${resource}`)
+          .query({ tag: [tags[0], tags[1], tags[0]], ...(mode ? { tagMode: mode } : {}) })
+          .expect(200)
+        expect(response.body.total).toBe(expected)
+        expect(response.body[key].map((item: { docId: string }) => item.docId).sort()).toEqual(
+          (mode === 'all'
+            ? [records[2].docId]
+            : records.slice(0, 3).map((item) => item.docId)
+          ).sort()
+        )
+      }
+      const page = await request(app)
+        .get(`/api/${resource}`)
+        .query({ tag: tags, limit: 1, page: 2, sortOrder: 'asc' })
+        .expect(200)
+      expect(page.body.total).toBe(3)
+      expect(page.body[key].map((item: { docId: string }) => item.docId)).toEqual([
+        records[1].docId,
+      ])
+      const literal = await request(app)
+        .get(`/api/${resource}`)
+        .query({ tag: punctuationTag })
+        .expect(200)
+      expect(literal.body[key].map((item: { docId: string }) => item.docId)).toEqual([
+        records[3].docId,
+      ])
+
+      if (resource === 'music') {
+        const album = await prisma.album.create({
+          data: {
+            slug: nextTestNumericSlug(),
+            title: 'Album Tags Test Multi Relations',
+            artist: '测试',
+          },
+        })
+        await prisma.songAlbumRelation.createMany({
+          data: records.slice(0, 3).map((song, index) => ({
+            albumDocId: album.docId,
+            songDocId: song.docId,
+            discNumber: index === 0 ? 2 : 1,
+            trackOrder: 3 - index,
+          })),
+        })
+        const linked = await request(app)
+          .get('/api/music')
+          .query({ albumDocId: album.docId, tag: tags, tagMode: 'all' })
+          .expect(200)
+        expect(linked.body.total).toBe(1)
+        expect(linked.body.songs.map((song: { docId: string }) => song.docId)).toEqual([
+          records[2].docId,
+        ])
+        const ordered = await request(app)
+          .get('/api/music')
+          .query({ albumDocId: album.docId, tag: tags, limit: 2 })
+          .expect(200)
+        expect(ordered.body.total).toBe(3)
+        expect(ordered.body.songs.map((song: { docId: string }) => song.docId)).toEqual([
+          records[2].docId,
+          records[1].docId,
+        ])
+      }
+    }
+  )
+
   it('专辑标签支持维护、筛选与汇总', async () => {
     const { agent, xsrfToken } = await createAuthenticatedAgent(
       adminUser.user.email,

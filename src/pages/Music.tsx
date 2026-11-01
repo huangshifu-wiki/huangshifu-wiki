@@ -12,6 +12,9 @@ import { IncrementalLoadFooter } from '../components/IncrementalLoadFooter'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { useTagSuggestions } from '../hooks/useTagSuggestions'
+import { useTagFilter } from '../hooks/useTagFilter'
+import { TagFilterPanel } from '../components/TagFilterPanel'
+import { MobileTagFilters } from '../components/MobileTagFilters'
 import { useI18n } from '../lib/i18n'
 import { AlbumCard } from '../components/Music/AlbumCard'
 import { Spinner } from '@/src/components/ui'
@@ -41,8 +44,18 @@ const Music = () => {
   const [albumRetryNonce, setAlbumRetryNonce] = useState(0)
   const tabParam = searchParams.get('tab')
   const activeTab: 'music' | 'albums' = tabParam === 'albums' ? 'albums' : 'music'
-  const tag = searchParams.get('tag') || ''
-  const albumTag = searchParams.get('albumTag') || ''
+  const songTagFilter = useTagFilter({
+    tagParam: 'tag',
+    modeParam: 'tagMode',
+    pageParams: ['musicPage', 'musicPageSize'],
+  })
+  const albumTagFilter = useTagFilter({
+    tagParam: 'albumTag',
+    modeParam: 'albumTagMode',
+    pageParams: ['albumPage'],
+  })
+  const { filter: songFilter } = songTagFilter
+  const { filter: albumFilter } = albumTagFilter
   const { user } = useAuth()
   const { currentSong, setCurrentSong, setIsPlaying, setPlaylist, playSongAtIndex } = useMusic()
   const { preferences, getScopedViewMode, setScopedViewMode } = useUserPreferences()
@@ -53,8 +66,8 @@ const Music = () => {
 
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [showAccompaniments, setShowAccompaniments] = useState(false)
-  const songScope = JSON.stringify([tag, showAccompaniments])
-  const albumScope = JSON.stringify([albumTag])
+  const songScope = JSON.stringify([songFilter, showAccompaniments])
+  const albumScope = JSON.stringify([albumFilter])
   const songTotal = songTotalState?.scope === songScope ? songTotalState.total : undefined
   const albumTotal = albumTotalState?.scope === albumScope ? albumTotalState.total : undefined
 
@@ -76,8 +89,15 @@ const Music = () => {
   })
   const musicTags = useTagSuggestions('music')
   const albumTags = useTagSuggestions('album')
-  const activeTag = activeTab === 'music' ? tag : albumTag
+  const activeTagFilter = activeTab === 'music' ? songTagFilter : albumTagFilter
   const activeTags = activeTab === 'music' ? musicTags : albumTags
+  const tagPanelProps = {
+    tags: activeTags,
+    value: activeTagFilter.filter,
+    onToggleTag: activeTagFilter.toggleTag,
+    onModeChange: activeTagFilter.setMode,
+    onClear: activeTagFilter.clear,
+  }
 
   const fetchSongPage = useCallback(
     async (page: number, signal?: AbortSignal) => {
@@ -88,7 +108,8 @@ const Music = () => {
           page,
           includeInstrumentals: showAccompaniments,
           sortOrder,
-          ...(tag ? { tag } : {}),
+          tag: songFilter.tags,
+          tagMode: songFilter.mode,
         },
         undefined,
         signal
@@ -99,7 +120,7 @@ const Music = () => {
         total: data.total || 0,
       }
     },
-    [musicPagination.pageSize, showAccompaniments, sortOrder, tag]
+    [musicPagination.pageSize, showAccompaniments, sortOrder, songFilter]
   )
   const fetchAlbumPage = useCallback(
     async (page: number, signal?: AbortSignal) => {
@@ -109,7 +130,8 @@ const Music = () => {
           limit: albumPagination.pageSize,
           page,
           sortOrder,
-          ...(albumTag ? { tag: albumTag } : {}),
+          tag: albumFilter.tags,
+          tagMode: albumFilter.mode,
         },
         undefined,
         signal
@@ -120,12 +142,12 @@ const Music = () => {
         total: data.total || 0,
       }
     },
-    [albumPagination.pageSize, sortOrder, albumTag]
+    [albumPagination.pageSize, sortOrder, albumFilter]
   )
   const incrementalSongs = useIncrementalListLoader({
     enabled: isIncrementalMode,
     pageSize: musicPagination.pageSize,
-    resetKey: `songs:${showAccompaniments}:${sortOrder}:${tag}`,
+    resetKey: JSON.stringify(['songs', showAccompaniments, sortOrder, songFilter]),
     fetchPage: fetchSongPage,
     getItemKey: (song) => song.docId,
     preserveItemsOnReset: true,
@@ -133,7 +155,7 @@ const Music = () => {
   const incrementalAlbums = useIncrementalListLoader({
     enabled: isIncrementalMode,
     pageSize: albumPagination.pageSize,
-    resetKey: `albums:${sortOrder}:${albumTag}`,
+    resetKey: JSON.stringify(['albums', sortOrder, albumFilter]),
     fetchPage: fetchAlbumPage,
     getItemKey: (album) => album.docId,
   })
@@ -145,6 +167,13 @@ const Music = () => {
 
   useEffect(() => {
     if (!isIncrementalMode) return
+    // 没有分页参数时不导航，避免增量刷新覆盖刚提交的筛选条件。
+    if (
+      !searchParams.has('musicPage') &&
+      !searchParams.has('musicPageSize') &&
+      !searchParams.has('albumPage')
+    )
+      return
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev)
@@ -155,7 +184,7 @@ const Music = () => {
       },
       { replace: true }
     )
-  }, [isIncrementalMode, setSearchParams])
+  }, [isIncrementalMode, searchParams, setSearchParams])
 
   useEffect(() => {
     if (tabParam && tabParam !== 'albums') {
@@ -177,25 +206,6 @@ const Music = () => {
         next.set('tab', 'albums')
       } else {
         next.delete('tab')
-      }
-      return next
-    })
-  }
-
-  const handleTagChange = (nextTag: string) => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      const param = activeTab === 'music' ? 'tag' : 'albumTag'
-      if (nextTag) {
-        next.set(param, nextTag)
-      } else {
-        next.delete(param)
-      }
-      if (activeTab === 'music') {
-        next.delete('musicPage')
-        next.delete('musicPageSize')
-      } else {
-        next.delete('albumPage')
       }
       return next
     })
@@ -341,14 +351,15 @@ const Music = () => {
           aria-busy={activeListState.isRefreshing || undefined}
         >
           {/* Header */}
-          <header className="mobile-page-header">
+          <header className="mobile-page-header grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 md:block">
             <div className="mobile-page-titlebar">
               <h1 className="mobile-page-title">{t('music.title')}</h1>
               {activeListState.isRefreshing && <Spinner size="sm" label="音乐刷新中" />}
             </div>
-            <div className="mt-3 flex">
+            <div className="col-span-2 mt-3 flex">
               <div className="h-px w-16 bg-gradient-to-r from-brand-gold/40 to-transparent" />
             </div>
+            <MobileTagFilters scopeKey={activeTab} {...tagPanelProps} />
           </header>
 
           {/* Two Column Layout */}
@@ -374,34 +385,6 @@ const Music = () => {
                 viewMode={viewMode}
                 onViewModeChange={(mode) => void setScopedViewMode('music', mode)}
               />
-
-              {(activeTags.length > 0 || activeTag) && (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => handleTagChange('')}
-                    className={clsx(
-                      'cursor-pointer rounded-sm px-2 py-0.5 text-xs theme-tag',
-                      !activeTag && 'font-semibold'
-                    )}
-                  >
-                    全部
-                  </button>
-                  {activeTags.map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      onClick={() => handleTagChange(item)}
-                      className={clsx(
-                        'cursor-pointer rounded-sm px-2 py-0.5 text-xs theme-tag',
-                        activeTag === item && 'font-semibold'
-                      )}
-                    >
-                      {item}
-                    </button>
-                  ))}
-                </div>
-              )}
 
               {activeTab === 'music' ? (
                 <div className="mt-5 flex flex-col">
@@ -548,6 +531,7 @@ const Music = () => {
 
             {/* Sidebar */}
             <aside className="mobile-detail-aside">
+              <TagFilterPanel {...tagPanelProps} className="hidden md:block" />
               <div className="py-5">
                 <div className="mb-4 flex justify-center">
                   <div className="h-px w-8 bg-gradient-to-r from-transparent via-brand-gold/30 to-transparent" />

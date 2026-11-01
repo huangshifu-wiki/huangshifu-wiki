@@ -52,6 +52,9 @@ import {
   useToast,
 } from '@/src/components/ui'
 import MarkdownEditor from '@/src/components/MarkdownEditor'
+import { TagFilterPanel } from '@/src/components/TagFilterPanel'
+import { MobileTagFilters } from '@/src/components/MobileTagFilters'
+import type { TagFilter } from '@/src/lib/tagFilters'
 
 const variants = ['primary', 'secondary', 'ghost', 'danger', 'warning', 'success', 'info'] as const
 
@@ -81,6 +84,20 @@ const UiShowcase = () => {
   const [fullscreenDemo, setFullscreenDemo] = useState(false)
   const [demoMarkdown, setDemoMarkdown] = useState(DEMO_MARKDOWN)
   const [menuResult, setMenuResult] = useState('尚未选择菜单操作')
+  const [demoFilter, setDemoFilter] = useState<TagFilter>({ tags: ['古风'], mode: 'any' })
+  const filterDemoProps = {
+    tags: ['古风', '现场', '原创', '现场录音与特别纪念演出'],
+    value: demoFilter,
+    onToggleTag: (tag: string) =>
+      setDemoFilter((current) => ({
+        ...current,
+        tags: current.tags.includes(tag)
+          ? current.tags.filter((item) => item !== tag)
+          : [...current.tags, tag],
+      })),
+    onModeChange: (mode: TagFilter['mode']) => setDemoFilter((current) => ({ ...current, mode })),
+    onClear: () => setDemoFilter({ tags: [], mode: 'any' }),
+  }
 
   return (
     <div data-theme={dark ? 'dark' : 'default'} className="mobile-page-shell min-h-screen">
@@ -213,6 +230,14 @@ const UiShowcase = () => {
               <RadioGroupItem value="all" label="所有人" />
               <RadioGroupItem value="member" label="成员" />
             </RadioGroup>
+          </div>
+        </ShowcaseSection>
+
+        <ShowcaseSection title="标签筛选">
+          <div className="grid max-w-sm grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3">
+            <h3 className="self-center text-sm text-text-primary md:hidden">音乐列表</h3>
+            <TagFilterPanel {...filterDemoProps} className="hidden md:col-span-2 md:block" />
+            <MobileTagFilters {...filterDemoProps} scopeKey="showcase" />
           </div>
         </ShowcaseSection>
 

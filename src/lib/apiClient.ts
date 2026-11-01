@@ -20,7 +20,7 @@ import type { z } from 'zod'
 import { getXsrfToken } from './xsrf'
 
 interface BaseRequestOptions extends RequestInit {
-  query?: Record<string, string | number | boolean | undefined | null>
+  query?: Record<string, string | number | boolean | readonly string[] | undefined | null>
   /** 是否启用请求去重，默认 true */
   dedup?: boolean
   /** 去重和缓存选项 */
@@ -50,7 +50,11 @@ function buildUrl(path: string, query?: RequestOptions['query']) {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined || value === null || value === '') continue
-    params.append(key, String(value))
+    if (Array.isArray(value)) {
+      for (const item of value) params.append(key, item)
+    } else {
+      params.append(key, String(value))
+    }
   }
   const qs = params.toString()
   return qs ? `${path}?${qs}` : path

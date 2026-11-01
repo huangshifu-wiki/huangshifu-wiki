@@ -46,6 +46,7 @@ import {
   normalizeLyricStorage,
   logger,
   recordBrowsingHistory,
+  buildTagFilterWhere,
 } from '../utils'
 import type { SongDuplicateStrategy } from '../utils'
 import { parseMusicUrl } from '../music/musicUrlParser'
@@ -56,6 +57,7 @@ import type { AuthenticatedRequest, ContentStatus } from '../types'
 import { Prisma } from '@prisma/client'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { formatMusicCredits, normalizeStringListInput } from '../../lib/musicCredits'
+import { normalizeTagFilter, type TagFilter } from '../../lib/tagFilters'
 
 const router = createRouter()
 
@@ -85,12 +87,17 @@ function buildReleaseDateOrderBy(
   ]
 }
 
-async function fetchAlbumTrackPage(albumDocId: string, skip: number, limit: number, tag = '') {
+async function fetchAlbumTrackPage(
+  albumDocId: string,
+  skip: number,
+  limit: number,
+  filter: TagFilter
+) {
   const where = {
     albumDocId,
     song: {
       deletedAt: null,
-      ...(tag ? { tags: { array_contains: [tag] } } : {}),
+      ...buildTagFilterWhere(filter),
     },
   }
   const [relations, total] = await Promise.all([
@@ -215,15 +222,18 @@ router.get(
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     try {
       const albumDocId = typeof req.query.albumDocId === 'string' ? req.query.albumDocId.trim() : ''
-      const tag = typeof req.query.tag === 'string' ? req.query.tag.trim() : ''
+      const filter = normalizeTagFilter(req.query.tag, req.query.tagMode)
       const limit = parseInteger(req.query.limit, 20, { min: 1, max: 100 })
       const page = parseInteger(req.query.page, 1, { min: 1 })
       const skip = (page - 1) * limit
       const includeInstrumentals = parseBoolean(req.query.includeInstrumentals, true)
       const sortOrder = parseMusicListSortOrder(req.query.sortOrder)
 
-      if (!req.authUser && !albumDocId) {
-        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}:${sortOrder}:${tag || ''}`
+      const cacheKey =
+        !req.authUser && !albumDocId
+          ? `music_list:${includeInstrumentals}:${page}:${limit}:${sortOrder}:${JSON.stringify([filter.tags, filter.mode])}`
+          : null
+      if (cacheKey) {
         const cached = enhancedCache.get(cacheKey)
         if (cached) {
           res.json(cached)
@@ -242,13 +252,12 @@ router.get(
 
       const where = {
         deletedAt: null,
-        ...(tag ? { tags: { array_contains: [tag] } } : {}),
-        ...(albumDocId ? { albumRelations: { some: { albumDocId } } } : {}),
+        ...buildTagFilterWhere(filter),
         ...(instrumentalDocIds.length > 0 ? { docId: { notIn: instrumentalDocIds } } : {}),
       }
 
       const [songs, total] = albumDocId
-        ? await fetchAlbumTrackPage(albumDocId, skip, limit, tag)
+        ? await fetchAlbumTrackPage(albumDocId, skip, limit, filter)
         : await Promise.all([
             fetchSongsWithRelations(where, {
               take: limit,
@@ -282,8 +291,7 @@ router.get(
         ...createPaginationMeta(total, page, limit, songs.length),
       }
 
-      if (!req.authUser && !albumDocId) {
-        const cacheKey = `music_list:${includeInstrumentals}:${page}:${limit}:${sortOrder}:${tag || ''}`
+      if (cacheKey) {
         enhancedCache.set(cacheKey, result, 120)
       }
 

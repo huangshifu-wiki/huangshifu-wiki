@@ -1,246 +1,172 @@
-// @vitest-environment jsdom
 import React from 'react'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, useNavigate, useSearchParams } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { deferred } from '../setup/deferred'
-
-import { ToastProvider } from '../../src/components/Toast'
-import { AuthProvider } from '../../src/context/AuthContext'
-import { MusicProvider } from '../../src/context/MusicContext'
-import { apiGet } from '../../src/lib/apiClient'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Music from '../../src/pages/Music'
+import { clearApiCache } from '../../src/lib/apiClient'
+import { resetAuthStateForTests } from '../../src/lib/auth'
+import { writeStoredPreferences } from '../../src/lib/theme'
+import {
+  createTagFilterApi,
+  filterRows,
+  filterResponse,
+  renderTagFilterPage,
+} from '../setup/tagFilterPage'
+import type { LocalApi } from '../setup/localApi'
 
-const loadMode = vi.hoisted(() => ({ value: 'pagination' as 'pagination' | 'incremental' }))
-vi.mock('../../src/context/UserPreferencesContext', () => ({
-  UserPreferencesProvider: ({ children }: { children: React.ReactNode }) => children,
-  useUserPreferences: () => ({
-    preferences: { listLoadMode: loadMode.value, showMobileSongSequence: false },
-    getScopedViewMode: () => 'list',
-    setScopedViewMode: vi.fn(),
-  }),
-}))
-vi.mock('../../src/components/SmartImage', () => ({ SmartImage: () => null }))
+let api: LocalApi
+beforeEach(async () => {
+  clearApiCache()
+  resetAuthStateForTests()
+  localStorage.clear()
+  api = await createTagFilterApi()
+  vi.stubGlobal('fetch', api.fetch)
+})
+afterEach(async () => {
+  cleanup()
+  await api.close()
+  vi.unstubAllGlobals()
+  clearApiCache()
+  resetAuthStateForTests()
+})
 
-vi.mock('../../src/lib/apiClient', () => ({
-  apiGet: vi.fn(),
-}))
+const resources = [
+  { resource: 'music', label: '歌曲', param: 'tag', mode: 'tagMode', page: 'musicPage' },
+  { resource: 'albums', label: '专辑', param: 'albumTag', mode: 'albumTagMode', page: 'albumPage' },
+] as const
+const panel = () => within(screen.getByRole('complementary'))
+const location = () =>
+  new URL(screen.getByTestId('location').textContent!, 'http://localhost').searchParams
 
-vi.mock('../../src/lib/auth', () => ({
-  auth: {},
-  onAuthStateChanged: vi.fn(),
-  refreshAuthState: vi.fn(),
-}))
-
-const UrlProbe = () => {
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  return (
-    <>
-      <button onClick={() => navigate(-1)}>后退</button>
-      <span data-testid="music-page">{searchParams.get('musicPage') || ''}</span>
-      <span data-testid="url">{searchParams.get('tag') || ''}</span>
-      <span data-testid="album-url">{searchParams.get('albumTag') || ''}</span>
-      <span data-testid="album-page">{searchParams.get('albumPage') || ''}</span>
-    </>
-  )
-}
-
-const renderPage = (entry = '/music') =>
-  render(
-    <MemoryRouter initialEntries={[entry]}>
-      <AuthProvider>
-        <MusicProvider>
-          <ToastProvider>
-            <Music />
-            <UrlProbe />
-          </ToastProvider>
-        </MusicProvider>
-      </AuthProvider>
-    </MemoryRouter>
-  )
-
-describe('音乐列表页标签按钮', () => {
-  beforeEach(() => {
-    loadMode.value = 'pagination'
-    vi.mocked(apiGet).mockImplementation(async (path: string) => {
-      if (path === '/api/music/tags') return { tags: ['古风', '现场'] }
-      if (path === '/api/albums/tags') return { tags: ['专辑古风', '专辑现场'] }
-      if (path === '/api/albums')
-        return { albums: [], total: 0, page: 1, limit: 24, hasMore: false }
-      if (path === '/api/music') return { songs: [], total: 0, page: 1, limit: 50, hasMore: false }
-      return Promise.reject(new Error(`unexpected apiGet: ${path}`))
-    })
-  })
-
-  it.each([
-    { tab: 'music', path: '/api/music', pageKey: 'musicPage', tag: '古风', total: 100 },
-    { tab: 'albums', path: '/api/albums', pageKey: 'albumPage', tag: '专辑古风', total: 48 },
-  ])(
-    '$tab 筛选后后退保持第 2 页，直到原范围结果返回',
-    async ({ tab, path, pageKey, tag, total }) => {
-      const { promise: delayed, resolve: resolveReturn } = deferred<unknown>()
-      let unfilteredRequests = 0
-      vi.mocked(apiGet).mockImplementation((requestPath: string, params) => {
-        if (requestPath === '/api/music/tags') return Promise.resolve({ tags: ['古风'] }) as never
-        if (requestPath === '/api/albums/tags')
-          return Promise.resolve({ tags: ['专辑古风'] }) as never
-        if (requestPath === path) {
-          const key = tab === 'music' ? 'songs' : 'albums'
-          if (params?.tag) return Promise.resolve({ [key]: [], total: 1 }) as never
-          unfilteredRequests++
-          if (unfilteredRequests > 1) return delayed as never
-          return Promise.resolve({ [key]: [], total }) as never
-        }
-        return Promise.resolve(
-          requestPath === '/api/music' ? { songs: [], total: 0 } : { albums: [], total: 0 }
-        ) as never
-      })
-      renderPage(`/music?tab=${tab}&${pageKey}=2`)
-      await screen.findByRole('button', { name: tag })
-      await waitFor(() => expect(unfilteredRequests).toBe(1))
-      fireEvent.click(screen.getByRole('button', { name: tag }))
-      await waitFor(() =>
-        expect(screen.getByTestId(tab === 'music' ? 'url' : 'album-url')).toHaveTextContent(tag)
+describe('音乐多标签筛选', () => {
+  it.each(
+    resources.flatMap((item) =>
+      (['pagination', 'incremental'] as const).map((loadMode) => ({ ...item, loadMode }))
+    )
+  )(
+    '$resource $loadMode 支持并交集、清空和独立标签状态',
+    async ({ resource, label, param, mode, loadMode }) => {
+      writeStoredPreferences({ listLoadMode: loadMode })
+      const otherParam = resource === 'music' ? 'albumTag' : 'tag'
+      renderTagFilterPage(
+        <Music />,
+        `/music?${resource === 'albums' ? 'tab=albums&' : ''}${otherParam}=现场`
       )
-      await waitFor(() =>
-        expect(
-          vi.mocked(apiGet).mock.calls.some(([p, params]) => p === path && params?.tag === tag)
-        ).toBe(true)
+      await waitFor(() => expect(screen.getByTestId('preferences')).toHaveTextContent(loadMode))
+      await screen.findByText(`${label}D`)
+      const user = userEvent.setup()
+      await user.click(await panel().findByRole('button', { name: '古风' }))
+      await waitFor(() => expect(screen.queryByText(`${label}B`)).not.toBeInTheDocument())
+      expect(await screen.findByText(`${label}A`)).toBeInTheDocument()
+      expect(await screen.findByText(`${label}C`)).toBeInTheDocument()
+      await user.click(panel().getByRole('button', { name: '现场' }))
+      expect(await screen.findByText(`${label}B`)).toBeInTheDocument()
+      expect(location().getAll(param)).toEqual(['古风', '现场'])
+      expect(location().get(otherParam)).toBe('现场')
+      expect(location().has(mode)).toBe(false)
+      await user.click(panel().getByRole('button', { name: '交集' }))
+      await waitFor(() => expect(screen.queryByText(`${label}A`)).not.toBeInTheDocument())
+      expect(screen.queryByText(`${label}B`)).not.toBeInTheDocument()
+      expect(screen.getByText(`${label}C`)).toBeInTheDocument()
+      expect(location().get(mode)).toBe('all')
+      await user.click(panel().getByRole('button', { name: '现场' }))
+      expect(await screen.findByText(`${label}A`)).toBeInTheDocument()
+      await user.click(panel().getByRole('button', { name: '清空标签' }))
+      expect(await screen.findByText(`${label}D`)).toBeInTheDocument()
+      expect(location().has(param)).toBe(false)
+      expect(location().has(mode)).toBe(false)
+      const otherTab = resource === 'music' ? '专辑' : '音乐'
+      await user.click(screen.getByRole('button', { name: otherTab }))
+      expect(await panel().findByRole('button', { name: '现场' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
       )
-      fireEvent.click(screen.getByRole('button', { name: '后退' }))
-      await waitFor(() => expect(unfilteredRequests).toBe(2))
-      const pageProbe = screen.getByTestId(tab === 'music' ? 'music-page' : 'album-page')
-      expect(pageProbe).toHaveTextContent('2')
-      expect(
-        vi
-          .mocked(apiGet)
-          .mock.calls.filter(([p]) => p === path)
-          .at(-1)?.[1]?.page
-      ).toBe(2)
-      await act(async () =>
-        resolveReturn({
-          [tab === 'music' ? 'songs' : 'albums']:
-            tab === 'albums'
-              ? [{ docId: 'album-2', title: '第二页专辑', artist: '歌手', cover: '' }]
-              : [],
-          total,
-        })
-      )
-      if (tab === 'albums') expect(await screen.findByText('第二页专辑')).toBeInTheDocument()
-      expect(pageProbe).toHaveTextContent('2')
     }
   )
 
-  it('点击标签后 URL 保留 tag 参数并携带 tag 重新请求列表', async () => {
-    renderPage()
-    const tagButton = await screen.findByRole('button', { name: '古风' })
-    fireEvent.click(tagButton)
-
-    await waitFor(() => expect(screen.getByTestId('url')).toHaveTextContent('古风'))
-    await waitFor(() => {
-      expect(
-        vi
-          .mocked(apiGet)
-          .mock.calls.some(([path, params]) => path === '/api/music' && params?.tag === '古风')
-      ).toBe(true)
-    })
-  })
-
-  it('专辑标签独立筛选并重置专辑页', async () => {
-    renderPage('/music?tab=albums&tag=古风&albumPage=2')
-    fireEvent.click(await screen.findByRole('button', { name: '专辑古风' }))
-    expect(screen.getByTestId('url')).toHaveTextContent('古风')
-    expect(screen.getByTestId('album-url')).toHaveTextContent('专辑古风')
-    expect(screen.getByTestId('album-page')).toHaveTextContent('')
-    await waitFor(() =>
-      expect(
-        vi
-          .mocked(apiGet)
-          .mock.calls.some(
-            ([path, params]) =>
-              path === '/api/albums' && params?.tag === '专辑古风' && params.page === 1
+  it.each(resources)(
+    '$resource 后退等待原范围总数，不丢失第二页',
+    async ({ resource, label, param, page }) => {
+      let release: (() => void) | undefined
+      let returning = false
+      api.handlers.set(`/api/${resource}`, (req, res) => {
+        const query = new URL(req.url!, 'http://localhost').searchParams
+        if (query.has('tag')) {
+          res.end(JSON.stringify(filterResponse(resource, req.url!)))
+          return
+        }
+        const send = () =>
+          res.end(
+            JSON.stringify({
+              [resource === 'music' ? 'songs' : 'albums']: [filterRows(resource)[3]],
+              total: 100,
+            })
           )
-      ).toBe(true)
-    )
-  })
+        if (returning) release = send
+        else send()
+      })
+      renderTagFilterPage(
+        <Music />,
+        `/music?${resource === 'albums' ? 'tab=albums&' : ''}${page}=2`
+      )
+      expect(await screen.findByText(`${label}D`)).toBeInTheDocument()
+      const user = userEvent.setup()
+      await user.click(await panel().findByRole('button', { name: '古风' }))
+      expect(await screen.findByText(`${label}A`)).toBeInTheDocument()
+      expect(location().has(page)).toBe(false)
+      returning = true
+      clearApiCache()
+      await user.click(screen.getByRole('button', { name: '后退' }))
+      await waitFor(() => expect(release).toBeDefined())
+      expect(location().get(page)).toBe('2')
+      expect(location().has(param)).toBe(false)
+      await act(async () => {
+        release!()
+      })
+      expect(await screen.findByText(`${label}D`)).toBeInTheDocument()
+      expect(location().get(page)).toBe('2')
+    }
+  )
 
-  it('没有标签建议时仍可清除专辑筛选', async () => {
-    vi.mocked(apiGet).mockImplementation(async (path: string) => {
-      if (path === '/api/albums/tags') return { tags: [] }
-      if (path === '/api/music/tags') return { tags: [] }
-      if (path === '/api/music') return { songs: [], total: 0 }
-      if (path === '/api/albums') return { albums: [], total: 0 }
-      throw new Error(`unexpected apiGet: ${path}`)
+  it.each([200, 500])('候选接口返回 %s 时仍可清除未知专辑标签', async (status) => {
+    api.json('/api/albums/tags', { tags: [] }, status)
+    renderTagFilterPage(<Music />, '/music?tab=albums&albumTag=旧标签&albumTagMode=all')
+    const selected = await within(await screen.findByRole('complementary')).findByRole('button', {
+      name: '旧标签',
     })
-    renderPage('/music?tab=albums&albumTag=已删除标签')
-    fireEvent.click(await screen.findByRole('button', { name: '全部' }))
-    expect(screen.getByTestId('album-url')).toBeEmptyDOMElement()
+    expect(selected).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(panel().getByRole('button', { name: '清空标签' }))
+    expect(await screen.findByText('专辑D')).toBeInTheDocument()
+    expect(location().has('albumTag')).toBe(false)
+    expect(location().has('albumTagMode')).toBe(false)
   })
 
-  it('增量模式切换专辑标签时替换旧结果', async () => {
-    loadMode.value = 'incremental'
-    vi.mocked(apiGet).mockImplementation(async (path: string, params) => {
-      if (path === '/api/music/tags') return { tags: ['古风'] }
-      if (path === '/api/albums/tags') return { tags: ['专辑古风', '专辑现场'] }
-      if (path === '/api/music') return { songs: [], total: 0 }
-      if (path === '/api/albums') {
-        const title = params?.tag === '专辑现场' ? '现场专辑' : '古风专辑'
-        return { albums: [{ docId: title, title, artist: '歌手', cover: '' }], total: 1 }
+  it.each(['pending', 'error'] as const)(
+    '专辑 %s 状态不会显示成功空态，完成或重试后展示内容',
+    async (state) => {
+      let release: (() => void) | undefined
+      api.handlers.set('/api/albums', (_req, res) => {
+        if (state === 'error') {
+          res.statusCode = 500
+          res.end(JSON.stringify({ error: '专辑暂不可用' }))
+        } else {
+          release = () => res.end(JSON.stringify({ albums: filterRows('albums'), total: 4 }))
+        }
+      })
+      renderTagFilterPage(<Music />, '/music?tab=albums')
+      if (state === 'pending') {
+        expect(await screen.findByRole('status', { name: '加载中' })).toBeInTheDocument()
+        await waitFor(() => expect(release).toBeDefined())
+        expect(screen.queryByText('暂无专辑，快去创建吧')).not.toBeInTheDocument()
+        await act(async () => {
+          release!()
+        })
+      } else {
+        await screen.findByRole('alert')
+        api.json('/api/albums', { albums: filterRows('albums'), total: 4 })
+        await userEvent.click(screen.getByRole('button', { name: '重新加载' }))
       }
-      throw new Error(`unexpected apiGet: ${path}`)
-    })
-    renderPage('/music?tab=albums&albumTag=专辑古风')
-    expect(await screen.findByText('古风专辑')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '专辑现场' }))
-    expect(await screen.findByText('现场专辑')).toBeInTheDocument()
-    expect(screen.queryByText('古风专辑')).not.toBeInTheDocument()
-  })
-
-  it('专辑请求未完成时显示整页音乐骨架；空结果返回后才显示空态', async () => {
-    let resolveAlbums!: (value: { albums: []; total: number }) => void
-    const albumRequest = new Promise<{ albums: []; total: number }>((resolve) => {
-      resolveAlbums = resolve
-    })
-    vi.mocked(apiGet).mockImplementation((path: string) => {
-      if (path === '/api/music/tags') return Promise.resolve({ tags: [] }) as never
-      if (path === '/api/music') return Promise.resolve({ songs: [], total: 0 }) as never
-      if (path === '/api/albums') return albumRequest as never
-      return Promise.reject(new Error(`unexpected apiGet: ${path}`)) as never
-    })
-
-    renderPage('/music?tab=albums')
-
-    expect(await screen.findByRole('status', { name: '加载中' })).toBeInTheDocument()
-    expect(screen.queryByText('暂无专辑，快去创建吧')).not.toBeInTheDocument()
-
-    resolveAlbums({ albums: [], total: 0 })
-
-    expect(await screen.findByText('暂无专辑，快去创建吧')).toBeInTheDocument()
-  })
-
-  it('专辑请求失败显示错误和重试入口，不伪装成成功空态', async () => {
-    let attempts = 0
-    vi.mocked(apiGet).mockImplementation((path: string) => {
-      if (path === '/api/music/tags') return Promise.resolve({ tags: [] }) as never
-      if (path === '/api/music') return Promise.resolve({ songs: [], total: 0 }) as never
-      if (path === '/api/albums') {
-        attempts += 1
-        return attempts === 1
-          ? (Promise.reject(new Error('albums unavailable')) as never)
-          : (Promise.resolve({ albums: [], total: 0 }) as never)
-      }
-      return Promise.reject(new Error(`unexpected apiGet: ${path}`)) as never
-    })
-
-    renderPage('/music?tab=albums')
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('加载失败')
-    expect(screen.queryByText('暂无专辑，快去创建吧')).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: '重新加载' }))
-
-    expect(await screen.findByText('暂无专辑，快去创建吧')).toBeInTheDocument()
-    expect(attempts).toBe(2)
-  })
+      expect(await screen.findByText('专辑D')).toBeInTheDocument()
+    }
+  )
 })

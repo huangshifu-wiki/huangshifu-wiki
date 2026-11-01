@@ -8,6 +8,10 @@ import Pagination from '../components/Pagination'
 import { ListPageContentState, ListPageLoadingBoundary } from '../components/ListPageState'
 import { Spinner } from '@/src/components/ui'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
+import { useTagFilter } from '../hooks/useTagFilter'
+import { useTagSuggestions } from '../hooks/useTagSuggestions'
+import { TagFilterPanel } from '../components/TagFilterPanel'
+import { MobileTagFilters } from '../components/MobileTagFilters'
 import { apiGet } from '../lib/apiClient'
 import { VIEW_MODE_CONFIG } from '../lib/viewModes'
 import type { EventListResponse } from '../types/api'
@@ -18,13 +22,14 @@ import type { ViewMode } from '../types/userPreferences'
 const DEFAULT_PAGE_SIZE = 12
 
 const Events = () => {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const selectedTag = searchParams.get('tag') || ''
+  const [, setSearchParams] = useSearchParams()
+  const tagFilter = useTagFilter({ tagParam: 'tag', modeParam: 'tagMode', pageParams: ['page'] })
+  const { filter } = tagFilter
   const [sortOrder, setSortOrder] = useState<EventSortOrder>('desc')
   const [events, setEvents] = useState<EventItem[]>([])
-  const [tags, setTags] = useState<string[]>([])
+  const tags = useTagSuggestions('event')
   const [totalPagesState, setTotalPages] = useState<{ scope: string; total: number }>()
-  const scope = JSON.stringify([selectedTag])
+  const scope = JSON.stringify([filter])
   const totalPages = totalPagesState?.scope === scope ? totalPagesState.total : undefined
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<unknown | null>(null)
@@ -46,29 +51,14 @@ const Events = () => {
 
   useEffect(() => {
     let cancelled = false
-    apiGet<{ tags: string[] }>('/api/events/tags')
-      .then((data) => {
-        if (!cancelled) setTags(data.tags || [])
-      })
-      .catch((error) => {
-        console.error('Fetch event tags failed:', error)
-        if (!cancelled) setTags([])
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
     setLoading(true)
     setLoadError(null)
     apiGet<EventListResponse>('/api/events', {
       page,
       limit: DEFAULT_PAGE_SIZE,
       sortOrder,
-      ...(selectedTag ? { tag: selectedTag } : {}),
+      tag: filter.tags,
+      tagMode: filter.mode,
     })
       .then((data) => {
         if (cancelled) return
@@ -76,10 +66,9 @@ const Events = () => {
         setTotalPages({ scope, total: data.totalPages || 1 })
       })
       .catch((error) => {
+        if (cancelled) return
         console.error('Fetch events failed:', error)
-        if (!cancelled) {
-          setLoadError(error)
-        }
+        setLoadError(error)
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -88,7 +77,7 @@ const Events = () => {
     return () => {
       cancelled = true
     }
-  }, [page, retryNonce, selectedTag, sortOrder, scope])
+  }, [page, retryNonce, filter, sortOrder, scope])
 
   const handleSortOrderChange = (value: EventSortOrder) => {
     if (value === sortOrder) return
@@ -103,16 +92,12 @@ const Events = () => {
     )
   }
 
-  const getTagUrl = (tag: string) => {
-    const next = new URLSearchParams(searchParams)
-    next.delete('page')
-    if (tag) {
-      next.set('tag', tag)
-    } else {
-      next.delete('tag')
-    }
-    const query = next.toString()
-    return query ? `/events?${query}` : '/events'
+  const tagPanelProps = {
+    tags,
+    value: filter,
+    onToggleTag: tagFilter.toggleTag,
+    onModeChange: tagFilter.setMode,
+    onClear: tagFilter.clear,
   }
   const eventsState = getListLoadState({
     items: events,
@@ -126,7 +111,7 @@ const Events = () => {
     <ListPageLoadingBoundary variant="events" isInitialLoading={eventsState.isInitialLoading}>
       <div className="gufeng-events-page mobile-page-shell">
         <div className="mobile-page-container" aria-busy={eventsState.isRefreshing || undefined}>
-          <header className="mobile-page-header">
+          <header className="mobile-page-header grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 md:block">
             <div className="mobile-page-titlebar">
               <div className="min-w-0">
                 <h1 className="mobile-page-title">游记</h1>
@@ -136,55 +121,60 @@ const Events = () => {
               </div>
               {eventsState.isRefreshing && <Spinner size="sm" label="游记刷新中" />}
             </div>
+            <MobileTagFilters scopeKey="events" {...tagPanelProps} />
           </header>
 
-          <EventFilters
-            tags={tags}
-            selectedTag={selectedTag}
-            sortOrder={sortOrder}
-            viewMode={viewMode}
-            getTagUrl={getTagUrl}
-            onSortOrderChange={handleSortOrderChange}
-            onViewModeChange={(mode) => void setScopedViewMode('events', mode)}
-          />
+          <div className="mobile-detail-grid">
+            <div className="min-w-0">
+              <EventFilters
+                sortOrder={sortOrder}
+                viewMode={viewMode}
+                onSortOrderChange={handleSortOrderChange}
+                onViewModeChange={(mode) => void setScopedViewMode('events', mode)}
+              />
 
-          <ListPageContentState
-            hasItems={eventsState.items.length > 0}
-            error={eventsState.error}
-            onRetry={eventsState.retry}
-            staleDescription="当前数据可能不是最新内容。"
-            empty={
-              <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
-                <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">暂无活动</p>
-              </div>
-            }
-          >
-            <>
-              <div
-                className={clsx(
-                  viewMode === 'list'
-                    ? 'flex flex-col gap-0.5'
-                    : clsx(
-                        'mobile-grid grid',
-                        viewMode === 'large' && 'events-large-grid',
-                        VIEW_MODE_CONFIG[viewMode].gridCols,
-                        VIEW_MODE_CONFIG[viewMode].gap
-                      )
-                )}
+              <ListPageContentState
+                hasItems={eventsState.items.length > 0}
+                error={eventsState.error}
+                onRetry={eventsState.retry}
+                staleDescription="当前数据可能不是最新内容。"
+                empty={
+                  <div className="border-y border-[var(--book-ink-line)] py-20 text-center">
+                    <p className="text-[0.9375rem] tracking-[0.08em] text-text-muted">暂无活动</p>
+                  </div>
+                }
               >
-                {events.map((event) => (
-                  <EventCard key={event.id} event={event} viewMode={viewMode} />
-                ))}
-              </div>
-              {hasMultiplePages && (
-                <Pagination
-                  page={page}
-                  totalPages={resolvedTotalPages}
-                  onPageChange={handlePageChange}
-                />
-              )}
-            </>
-          </ListPageContentState>
+                <>
+                  <div
+                    className={clsx(
+                      viewMode === 'list'
+                        ? 'flex flex-col gap-0.5'
+                        : clsx(
+                            'mobile-grid grid',
+                            viewMode === 'large' && 'events-large-grid',
+                            VIEW_MODE_CONFIG[viewMode].gridCols,
+                            VIEW_MODE_CONFIG[viewMode].gap
+                          )
+                    )}
+                  >
+                    {events.map((event) => (
+                      <EventCard key={event.id} event={event} viewMode={viewMode} />
+                    ))}
+                  </div>
+                  {hasMultiplePages && (
+                    <Pagination
+                      page={page}
+                      totalPages={resolvedTotalPages}
+                      onPageChange={handlePageChange}
+                    />
+                  )}
+                </>
+              </ListPageContentState>
+            </div>
+            <aside className="mobile-detail-aside hidden md:block">
+              <TagFilterPanel {...tagPanelProps} />
+            </aside>
+          </div>
         </div>
       </div>
     </ListPageLoadingBoundary>

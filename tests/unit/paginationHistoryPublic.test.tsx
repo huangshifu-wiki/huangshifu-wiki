@@ -6,7 +6,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { deferred } from '../setup/deferred'
 import { apiGet } from '../../src/lib/apiClient'
 import WikiList from '../../src/pages/wiki/WikiList'
-import Events from '../../src/pages/Events'
 import Forum from '../../src/pages/Forum'
 
 vi.mock('../../src/lib/apiClient', () => ({ apiGet: vi.fn() }))
@@ -60,17 +59,6 @@ const cases = [
     small: { pages: [], total: 1 },
   },
   {
-    name: '活动',
-    Page: Events,
-    initial: '/events?page=2',
-    target: '/events?tag=live',
-    api: '/api/events',
-    key: 'tag',
-    filtered: 'live',
-    large: { events: [], totalPages: 2 },
-    small: { events: [], totalPages: 1 },
-  },
-  {
     name: '论坛',
     Page: Forum,
     initial: '/forum?page=2',
@@ -91,7 +79,6 @@ describe('公开列表分页历史', () => {
       const { promise, resolve } = deferred<unknown>()
       let originalCalls = 0
       vi.mocked(apiGet).mockImplementation((path, params) => {
-        if (path === '/api/events/tags') return Promise.resolve({ tags: ['live'] }) as never
         if (path === '/api/sections')
           return Promise.resolve({ sections: [{ id: 'music', name: 'music' }] }) as never
         if (path !== api) throw new Error(`unexpected ${path}`)
@@ -130,25 +117,9 @@ describe('公开列表分页历史', () => {
       expect(screen.getByTestId('location')).toHaveTextContent('page=2')
     }
   )
-  it('活动请求失败时保留深链接页码', async () => {
-    vi.mocked(apiGet).mockImplementation((path) =>
-      path === '/api/events/tags'
-        ? (Promise.resolve({ tags: [] }) as never)
-        : (Promise.reject(new Error('请求失败')) as never)
-    )
-    render(
-      <MemoryRouter initialEntries={['/events?page=4']}>
-        <Navigation />
-        <Events />
-      </MemoryRouter>
-    )
-    await screen.findByRole('alert')
-    expect(screen.getByTestId('location')).toHaveTextContent('page=4')
-  })
   it.each(cases)('$name 当前范围总数返回后修正越界页', async ({ Page, initial, api, large }) => {
     const { promise, resolve } = deferred<unknown>()
     vi.mocked(apiGet).mockImplementation((path) => {
-      if (path === '/api/events/tags') return Promise.resolve({ tags: [] }) as never
       if (path === '/api/sections') return Promise.resolve({ sections: [] }) as never
       if (path === api) return promise as never
       throw new Error(`unexpected ${path}`)

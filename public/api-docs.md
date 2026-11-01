@@ -2485,7 +2485,7 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 ### 读取、管理和导入
 
-- GET /api/music：query page/limit(1–100，默认20)、tag、albumDocId、includeInstrumentals(默认true)、sortOrder=asc|desc（默认desc）。按 albumDocId 查询时只列该专辑关联曲目；返回 songs 与分页元数据；列表省略 lyric/description。
+- GET /api/music：query page/limit(1–100，默认20)、可重复 tag、tagMode=any|all（默认any，并集；all为交集）、albumDocId、includeInstrumentals(默认true)、sortOrder=asc|desc（默认desc）。例如 `?tag=古风&tag=现场&tagMode=all`；标签按完整词匹配，无标签时不限制。按 albumDocId 查询时只列该专辑关联曲目；返回 songs 与分页元数据；列表省略 lyric/description。
 - GET /tags：返回全站未删除歌曲标签。
 - GET /:slug：slug 为公开数字 slug；返回 {song}，含歌词/description 及用户收藏状态。
 - GET /song/:id（同挂载 /api/music）：id 是 Netease 外部 sourceId，不是 docId。存在已入库映射时返回歌曲与播放数据；未入库时可能返回 docId:null 的外部预览。不能拿此 ID 更新/删除歌曲。
@@ -2574,7 +2574,7 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：读取 music；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query page integer default1; limit integer1–100 default20; tag?:string; albumDocId?:business docId; includeInstrumentals:boolean default true; sortOrder=asc|desc default desc；body/multipart 此处理器不读取 JSON body；解析 schema query parameters；数值/布尔解析 limit: integer; default 20; range 1–100；page: integer; default 1；includeInstrumentals: boolean; default true。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
+- 参数契约：path 无 path 字段；query page integer default1; limit integer1–100 default20; tag?:string|string[]（重复同名参数）; tagMode=any|all default any; albumDocId?:business docId; includeInstrumentals:boolean default true; sortOrder=asc|desc default desc；body/multipart 此处理器不读取 JSON body；解析 schema query parameters；数值/布尔解析 limit: integer; default 20; range 1–100；page: integer; default 1；includeInstrumentals: boolean; default true。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
 - 成功响应：HTTP 200: <code>response from cached</code>、<code>songs</code>、<code>nested DTO fields</code>；HTTP 500: <code>error</code>；DTO transformer toSongResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
 - HTTP 状态/失败：200, 400, 500。HTTP 500: 获取音乐失败。所有权、可见性、软删除和副作用见本章业务说明。
 - curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
@@ -3050,7 +3050,7 @@ curl --fail-with-body "$BASE_URL/api/music/song/REPLACE_ID"
 
 ## 10. 专辑管理
 
-- GET /api/albums：query platform、page、limit(1–100，默认20)、sortOrder=asc|desc（默认desc）；返回 albums、分页元数据、trackCount。GET /:slug 使用公开数字 slug，详情返回 album、关联 tracks/discs；DELETE/ PATCH 等写操作使用 docId。
+- GET /api/albums：query platform、可重复 tag、tagMode=any|all（默认any，并集；all为交集）、page、limit(1–100，默认20)、sortOrder=asc|desc（默认desc）；标签按完整词匹配，无标签时不限制；返回 albums、分页元数据、trackCount。GET /:slug 使用公开数字 slug，详情返回 album、关联 tracks/discs；DELETE/ PATCH 等写操作使用 docId。
 - GET /:id/posts 中 id 实际是 album docId，不是公开 slug；query limit(1–100) 与 sort=latest|hot|recommended；只返回可见关联帖子，无分页元数据。
 - POST /api/albums：管理员，最少 {title,artist}；description、releaseDate、tracks、sources 可选。tracks 是碟片数组，source ID 可共享并在 duplicates 提醒。201 {album,duplicates}。
 - PATCH /:docId：管理员 partial 更新 title/artist/description/releaseDate/tracks/sources；description:null 清空；releaseDate:null 清除；tracks 提交时是完整碟片快照；sources 提交时整体替换，[] 清空；未提交字段保留。成功 {album,duplicates}。
@@ -3079,7 +3079,7 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：读取 albums；目标资源与完整业务约束见第 10 章「专辑管理」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query platform?:string; page integer default1; limit integer1–100 default20; sortOrder=asc|desc default desc；body/multipart 此处理器不读取 JSON body；解析 schema query parameters；数值/布尔解析 limit: integer; default 20; range 1–100；page: integer; default 1。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
+- 参数契约：path 无 path 字段；query platform?:string; tag?:string|string[]（重复同名参数）; tagMode=any|all default any; page integer default1; limit integer1–100 default20; sortOrder=asc|desc default desc；body/multipart 此处理器不读取 JSON body；解析 schema query parameters；数值/布尔解析 limit: integer; default 20; range 1–100；page: integer; default 1。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
 - 成功响应：HTTP 200: <code>response from cached</code>、<code>albums</code>、<code>nested DTO fields</code>；HTTP 500: <code>error</code>；DTO transformer toAlbumResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
 - HTTP 状态/失败：200, 400, 500。HTTP 500: 获取专辑失败。所有权、可见性、软删除和副作用见本章业务说明。
 - curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
@@ -3317,7 +3317,7 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 ### 活动
 
-- GET /api/events：公开，query tag、sortOrder=asc|upcoming|desc（默认desc）、page、limit；upcoming 按未来时间排序；返回 events,total,page,limit,totalPages,hasMore。GET /tags 返回全站未删除活动标签。GET /:slug 使用公开数字 slug。
+- GET /api/events：公开，query 可重复 tag、tagMode=any|all（默认any，并集；all为交集）、sortOrder=asc|upcoming|desc（默认desc）、page、limit；标签按完整词匹配，任一标签超过50字符返回400，无标签时不限制；upcoming 按未来时间排序；返回 events,total,page,limit,totalPages,hasMore。GET /tags 返回全站未删除活动标签。GET /:slug 使用公开数字 slug。
 - POST /api/events 与 PUT /api/events/:id：管理员，使用完整写入 schema。title 必填；location/content/timeSlots/timeStatus/ticketPrices/saleTimes/lineup/tags/externalLinks/relatedLinks/coverAssetId/uploadSessionId/posters 可选并按 schema 默认空值。至少提供 timeSlots 或 timeStatus=pending|postponed，不能同时有明确时间和待定/推迟。
   - timeSlots 元素：{type:date|datetime,start,end?}；date 用 YYYY-MM-DD，datetime 用 YYYY-MM-DDTHH:mm。
   - saleTimes 元素：{time:YYYY-MM-DDTHH:mm,note?}；ticketPrices 元素严格为 {description?,price:number>=0}。
@@ -3445,7 +3445,7 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/
 
 - 用途：读取 events；目标资源与完整业务约束见第 11 章「活动与票务」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query tag?:string; sortOrder=asc|upcoming|desc default desc; page integer default1; limit integer default20 clamp1–100；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
+- 参数契约：path 无 path 字段；query tag?:string|string[]（重复同名参数）; tagMode=any|all default any; sortOrder=asc|upcoming|desc default desc; page integer default1; limit integer default20 clamp1–100；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
 - 成功响应：HTTP 200: <code>events</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>；HTTP 400: <code>error</code>；DTO transformer toEventListResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
 - HTTP 状态/失败：200, 400。HTTP 400 分支；触发条件见领域说明。所有权、可见性、软删除和副作用见本章业务说明。
 - curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。

@@ -12,6 +12,7 @@
 - 需要焦点管理、键盘导航或 Portal 的交互优先组合 Dialog、AlertDialog、DropdownMenu、Popover、Tooltip、Tabs 等组件，不自行实现行为内核。
 - `TagInput` 是受控多标签表单控件：`value` 为 `readonly string[]`、`onChange` 返回新数组，支持输入框聚焦显示候选、输入框失焦关闭候选、Enter 添加、令牌删除、候选 listbox 点选、Arrow/Escape 和 IME 保护；候选数组由业务层传入，组件不得请求 API。令牌删除操作必须使用带可读 `aria-label` 的 `IconButton`，输入控件保留 `id` 与外部 label 关联。
 - 自带站内候选的标签、地点与地址搜索输入关闭浏览器自动补全（`autoComplete="off"`），避免输入历史遮挡站内候选；普通 Input 不全局禁用自动填充。`TagInput` 默认关闭自动补全，调用方仍可通过原生 `autoComplete` 属性显式覆盖。浏览器或扩展可能忽略该提示，不能用增加 `z-index` 覆盖浏览器原生浮层。
+- 列表标签筛选组合使用 `src/components/TagFilterPanel.tsx`：标签采用管理操作同款 `Button`（`appearance="plain"`、`soft`、`size="sm"`），未选中使用 secondary 中性色，选中使用 info 语义色与勾选标记，并通过 `aria-pressed` 暴露多选状态；按钮可换行并容纳长标签。并集/交集使用标题旁的紧凑文字切换，默认并集。候选与已选标签均由调用方传入。`MobileTagFilters` 在 768px 以下通过 `display: contents` 参与页头两列 Grid：标题位于首行左侧，secondary 描边筛选按钮位于右侧，使用标准 sm 尺寸；展开面板横跨两列并向下推动内容，标签按钮与留白和桌面保持一致。选择即时生效且保持展开，Escape、外部点击或再次点击入口关闭。桌面将同一受控面板放入侧栏。两者透传 ref、原生属性和 className，不读取业务 Context 或请求接口；示例见 `/__ui` 的“标签筛选”区。
 - 新写的整屏工作区（编辑器全屏这类需要铺满视口的表面）使用 `FullscreenSurface`，不自行实现 `createPortal` + 焦点 + Escape + 滚动锁。祖先的 `transform`、`filter`、`backdrop-filter`、`will-change`、`contain` 会把 `position: fixed` 后代的包含块从视口改成该祖先，所以整屏表面必须挂到 `body`；共享样式里不得给页面容器或弹窗留下常驻 `transform`——居中改用 `inset-0` + `margin: auto`，关键帧含 `transform` 的入场动画 `animation-fill-mode` 只用 `backwards`（`both`/`forwards` 会在动画结束后继续保留最后一帧的 `transform`）。层叠上下文不改变包含块，但会决定谁盖住谁，见下表的 `z-index` 约定。
 
 ## Markdown 内容展示
