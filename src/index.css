@@ -1308,14 +1308,13 @@ a[href]:not([data-press-feedback='none']),
 }
 
 @media (pointer: coarse) {
-  .ui-button:not([data-control-inset]),
   .ui-tag-input,
   input.ui-control:not([type='file']):not([type='checkbox']):not([type='radio']):not(
       [type='range']
     ):not([type='hidden']):not([data-control-inset]),
   select.ui-control,
-  [data-pressable],
-  .mobile-touch-target {
+  [data-pressable]:not(.ui-button),
+  .mobile-touch-target:not(.ui-button) {
     min-width: 44px;
     min-height: 44px;
   }

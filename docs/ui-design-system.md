@@ -61,7 +61,7 @@ Button 变体固定为 `primary`、`secondary`、`ghost`、`danger`、`warning`�
 
 `appearance="plain"` 用于分段选择、页码、筛选组等专用交互，保留圆角与选中形态，不另设尺寸体系。ghost 默认 plain，其余变体默认 action；显式 appearance 优先。IconButton 固定 plain，导航、播放器、整卡点击面和编辑器工具栏保留专用形态。首页 hero 使用相同 LinkButton，保留展示用的宽间距，同组成员保持一致。
 
-普通 Input、Select 最小高度 36px，左右 12px、上下 6px，行高 20px；小屏字号 16px，sm 起 14px。Textarea 保留最小 112px 的可编辑高度、业务 rows、上下 8px 与 24px 行高。Field 内部间距 6px，TagInput 最小高度 36px，内嵌输入不重复叠加最小高度。粗指针下共享按钮（含 plain、图标及各语义状态）、标签输入和普通单行输入/选择保留至少 44px 触控面积；多行输入和隐藏文件上传不受该单行规则影响。标签令牌删除、拖动手柄等内嵌控件通过 `data-control-inset` 保留专用尺寸。
+普通 Input、Select 最小高度 36px，左右 12px、上下 6px，行高 20px；小屏字号 16px，sm 起 14px。Textarea 保留最小 112px 的可编辑高度、业务 rows、上下 8px 与 24px 行高。Field 内部间距 6px，TagInput 最小高度 36px，内嵌输入不重复叠加最小高度。共享按钮在移动端与桌面端使用相同尺寸；粗指针下标签输入和普通单行输入/选择保留至少 44px 触控面积，多行输入和隐藏文件上传不受该单行规则影响。标签令牌删除、拖动手柄等内嵌控件通过 `data-control-inset` 保留专用尺寸。
 
 调用方可通过 `className` 扩展布局，但不应复制组件的基础视觉样式。合并 class 使用 `cn()`，以便 Tailwind 冲突由 `tailwind-merge` 处理。
 
