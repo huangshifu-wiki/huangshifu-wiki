@@ -26,7 +26,13 @@ export const AdminResourceActions = ({
 }: AdminResourceActionsProps) => {
   if (pendingAction) {
     return (
-      <Button variant={pendingAction === 'restore' ? 'success' : 'danger'} soft size="sm" loading>
+      <Button
+        variant={pendingAction === 'restore' ? 'success' : 'danger'}
+        appearance="plain"
+        soft
+        size="sm"
+        loading
+      >
         {pendingAction === 'delete'
           ? '删除中...'
           : pendingAction === 'restore'
@@ -39,18 +45,33 @@ export const AdminResourceActions = ({
   return (
     <div className="flex flex-wrap items-center gap-2">
       {!isDeleted && onEdit && (
-        <Button variant="warning" soft size="sm" onClick={onEdit} leftIcon={<Edit3 size={14} />}>
+        <Button
+          variant="warning"
+          appearance="plain"
+          soft
+          size="sm"
+          onClick={onEdit}
+          leftIcon={<Edit3 size={14} />}
+        >
           编辑
         </Button>
       )}
       {!isDeleted && onManage && (
-        <Button variant="warning" soft size="sm" onClick={onManage} leftIcon={<List size={14} />}>
+        <Button
+          variant="warning"
+          appearance="plain"
+          soft
+          size="sm"
+          onClick={onManage}
+          leftIcon={<List size={14} />}
+        >
           管理
         </Button>
       )}
       {!isDeleted && onCover && (
         <Button
           variant="warning"
+          appearance="plain"
           soft
           size="sm"
           onClick={onCover}
@@ -63,6 +84,7 @@ export const AdminResourceActions = ({
         <>
           <Button
             variant="success"
+            appearance="plain"
             soft
             size="sm"
             onClick={onRestore}
@@ -72,6 +94,7 @@ export const AdminResourceActions = ({
           </Button>
           <Button
             variant="danger"
+            appearance="plain"
             soft
             size="sm"
             onClick={onPermanentDelete}
@@ -81,7 +104,14 @@ export const AdminResourceActions = ({
           </Button>
         </>
       ) : (
-        <Button variant="danger" soft size="sm" onClick={onDelete} leftIcon={<Trash2 size={14} />}>
+        <Button
+          variant="danger"
+          appearance="plain"
+          soft
+          size="sm"
+          onClick={onDelete}
+          leftIcon={<Trash2 size={14} />}
+        >
           删除
         </Button>
       )}
