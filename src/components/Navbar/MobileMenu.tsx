@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type Ref } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { LogOut, Search as SearchIcon } from '@/src/components/icons'
 import type { FloatingPresence } from '../../hooks/useFloatingPresence'
@@ -13,6 +13,7 @@ import styles from '../Navbar.module.css'
 interface MobileMenuProps {
   open: boolean
   presence: FloatingPresence
+  searchInputRef: Ref<HTMLInputElement>
   onOpenAuth: (mode: AuthMode) => void
   onLogout: () => void | Promise<void>
   allowRegister: boolean
@@ -26,6 +27,7 @@ interface MobileMenuProps {
 export const MobileMenu = ({
   open,
   presence,
+  searchInputRef,
   onOpenAuth,
   onLogout,
   allowRegister,
@@ -65,6 +67,7 @@ export const MobileMenu = ({
                 <SearchIcon size={16} />
               </Button>
               <Input
+                ref={searchInputRef}
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}

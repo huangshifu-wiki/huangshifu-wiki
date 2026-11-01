@@ -59,6 +59,15 @@ describe('Navbar', () => {
     expect(within(menu).getByRole('group', { name: '颜色模式' })).toBeVisible()
   })
 
+  it.each([false, true])('搜索入口展开菜单并聚焦输入框（菜单已展开：%s）', async (open) => {
+    const { container } = renderNavbar()
+    const user = userEvent.setup()
+    if (open) await user.click(screen.getByRole('button', { name: '打开菜单' }))
+    await user.click(screen.getByRole('button', { name: '打开搜索' }))
+    const menu = within(container.querySelector('#site-mobile-menu') as HTMLElement)
+    await waitFor(() => expect(menu.getByRole('textbox')).toHaveFocus())
+  })
+
   it.each(['登录', '注册'])('首次打开%s表单，关闭后可重新打开', async (mode) => {
     const { container } = renderNavbar()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()

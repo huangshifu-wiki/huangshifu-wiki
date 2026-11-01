@@ -285,7 +285,7 @@
   }
 
   /* inline-flex 保留 IconButton 的 flex 居中；block 会让图标偏离碰撞箱中心 */
-  .siteNavToggle {
+  .siteNavToggle:not(.siteSearchToggle) {
     display: inline-flex;
   }
 
@@ -297,9 +297,13 @@
   }
 }
 
-/* 窄容器仅保留品牌与菜单按钮，搜索及账户入口由菜单承接 */
+/* 窄容器以独立搜索按钮承接搜索入口，账户入口由菜单承接 */
 @container navbar (max-width: 47.98rem) {
   .siteDesktopControls {
     display: none;
+  }
+
+  .siteSearchToggle {
+    display: inline-flex;
   }
 }

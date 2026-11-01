@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import { Menu, X } from '@/src/components/icons'
+import { Menu, Search, X } from '@/src/components/icons'
 import { logoutRequest } from '../lib/auth'
 import { HeaderUserControls } from './HeaderUserControls'
 import { useToast } from './Toast'
@@ -31,9 +31,28 @@ export const Navbar = () => {
   const allowRegister = features.registrationEnabled
   const location = useLocation()
   const navRef = useRef<HTMLElement | null>(null)
+  const mobileSearchRef = useRef<HTMLInputElement>(null)
+  const focusSearchPending = useRef(false)
   // 菜单的挂载状态（关闭动画结束后才卸载），用于让整条导航在动画期间保持磨砂面板样式
   // 180ms 与 .floating-expand 的过渡时长一致，避免动画结束后磨砂面板多留一截
   const menuPresence = useFloatingPresence(isMenuOpen, 180)
+
+  // 菜单进入展开态后聚焦，避免收起态的搜索框无法接收焦点。
+  useEffect(() => {
+    if (menuPresence.state === 'open' && focusSearchPending.current) {
+      mobileSearchRef.current?.focus()
+      focusSearchPending.current = false
+    }
+  }, [menuPresence.state])
+
+  const openSearch = () => {
+    if (menuPresence.state === 'open') {
+      mobileSearchRef.current?.focus()
+    } else {
+      focusSearchPending.current = true
+      setIsMenuOpen(true)
+    }
+  }
 
   // 路由变化后收起移动端菜单（点击菜单链接、提交搜索、前进/后退均覆盖）
   useEffect(() => {
@@ -112,6 +131,19 @@ export const Navbar = () => {
             type="button"
             variant="ghost"
             size="lg"
+            onClick={openSearch}
+            className={`${styles.siteNavToggle} ${styles.siteSearchToggle} mobile-touch-target`}
+            aria-label="打开搜索"
+            aria-expanded={isMenuOpen}
+            aria-controls="site-mobile-menu"
+          >
+            <Search size={24} />
+          </IconButton>
+
+          <IconButton
+            type="button"
+            variant="ghost"
+            size="lg"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
             className={`${styles.siteNavToggle} mobile-touch-target`}
             aria-label={isMenuOpen ? '关闭菜单' : '打开菜单'}
@@ -125,6 +157,7 @@ export const Navbar = () => {
       <MobileMenu
         open={isMenuOpen}
         presence={menuPresence}
+        searchInputRef={mobileSearchRef}
         onOpenAuth={openAuthModal}
         onLogout={handleLogout}
         allowRegister={allowRegister}
