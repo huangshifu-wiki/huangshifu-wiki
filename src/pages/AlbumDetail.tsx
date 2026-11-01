@@ -1,6 +1,6 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Disc3, Edit3, Play, Heart, List, ChevronDown, ChevronUp } from '@/src/components/icons'
+import { Disc3, Edit3, Play, List, ChevronDown, ChevronUp } from '@/src/components/icons'
 import { clsx } from 'clsx'
 
 import { apiDelete, apiGet, apiPost } from '../lib/apiClient'
@@ -13,7 +13,7 @@ import { SmartImage } from '../components/SmartImage'
 import { CoverPlaceholder } from '../components/CoverPlaceholder'
 import { Lightbox } from '../components/Lightbox'
 import { toDateValue } from '../lib/dateUtils'
-import { formatMusicCredits } from '../lib/musicCredits'
+import { SongCard } from '../components/Music/SongCard'
 import { isPlayableSong } from '../lib/musicPlayback'
 import {
   getDetailFallbackSeo,
@@ -24,29 +24,16 @@ import {
 } from '../lib/seo'
 import type { SeoMetadata } from '../lib/seo'
 import { Button, LoadErrorState } from '@/src/components/ui'
-import type { MusicExternalSource } from '../types/entities'
+import type { MusicExternalSource, SongItem as MusicSong } from '../types/entities'
 
 import { routeLoaders } from '../lib/routePrefetch'
 
 const AlbumFormModal = routeLoaders.AlbumForm.Component
 const AlbumTrackEditor = routeLoaders.AlbumTrackEditor.Component
 
-type SongItem = {
-  docId: string
-  slug?: string
-  title: string
-  artists: string[]
-  album: string
-  cover: string
-  coverThumbnail?: string
-  audioUrl: string
-  sourceUrl?: string | null
-  lyric?: string | null
-  favoritedByMe?: boolean
+type SongItem = MusicSong & {
   trackOrder?: number
   discNumber?: number
-  sources?: MusicExternalSource[]
-  playable?: boolean
 }
 
 type AlbumResponse = {
@@ -437,75 +424,25 @@ const AlbumDetail = () => {
             曲目列表
           </h2>
           <div className="flex flex-col">
-            {displayTracks.map(({ track, disc, discIndex, firstInDisc }, index) => {
-              const playable = isPlayableSong(track)
-              return (
-                <React.Fragment key={track.docId}>
-                  {firstInDisc && (
-                    <h3 className="pt-5 pb-2 text-sm font-semibold text-text-secondary">
-                      {album.discs?.find((item) => item.disc === disc)?.name || `Disc ${disc}`}
-                    </h3>
-                  )}
-                  <div
-                    className={clsx(
-                      'flex items-center gap-3 py-3 px-1 border-b border-border transition-colors sm:gap-4',
-                      currentSong?.docId === track.docId && 'bg-brand-gold/10'
-                    )}
-                  >
-                    <span className="w-7 flex-shrink-0 text-right text-sm text-text-muted">
-                      {discIndex}
-                    </span>
-                    <button
-                      type="button"
-                      data-press-feedback="ripple"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handlePlay(index)
-                      }}
-                      disabled={!playable}
-                      className="w-8 h-8 flex items-center justify-center text-text-secondary hover:text-brand-gold hover:bg-surface-alt rounded-full transition-all flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-text-secondary disabled:hover:bg-transparent"
-                      title={playable ? '播放' : '暂无可播放音源'}
-                    >
-                      <Play size={14} />
-                    </button>
-                    <Link
-                      to={`/music/${track.slug || track.docId}`}
-                      className="flex min-h-11 min-w-0 flex-1 flex-col justify-center"
-                      data-pressable
-                      data-press-feedback="state"
-                    >
-                      <p className="text-base text-text-primary truncate hover:text-brand-gold transition-colors">
-                        {track.title}
-                      </p>
-                      <p className="text-xs text-text-muted truncate">
-                        {formatMusicCredits(track.artists, '未知歌手')}
-                      </p>
-                      {!playable ? (
-                        <p className="text-xs text-text-muted truncate">暂无可播放音源</p>
-                      ) : null}
-                    </Link>
-                    <button
-                      type="button"
-                      data-press-feedback="ripple"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        toggleFavorite(track)
-                      }}
-                      disabled={favoriting === track.docId}
-                      className={clsx(
-                        'p-2 transition-colors flex-shrink-0',
-                        track.favoritedByMe
-                          ? 'theme-text-error'
-                          : 'text-text-muted theme-icon-button-danger',
-                        favoriting === track.docId && 'opacity-50 cursor-not-allowed'
-                      )}
-                    >
-                      <Heart size={15} />
-                    </button>
-                  </div>
-                </React.Fragment>
-              )
-            })}
+            {displayTracks.map(({ track, disc, discIndex, firstInDisc }, index) => (
+              <React.Fragment key={track.docId}>
+                {firstInDisc && (
+                  <h3 className="pt-5 pb-2 text-sm font-semibold text-text-secondary">
+                    {album.discs?.find((item) => item.disc === disc)?.name || `Disc ${disc}`}
+                  </h3>
+                )}
+                <SongCard
+                  song={track}
+                  sequenceNumber={discIndex}
+                  showSequenceOnMobile
+                  showAlbum={false}
+                  isCurrentSong={currentSong?.docId === track.docId}
+                  isFavoriting={favoriting === track.docId}
+                  onPlay={() => handlePlay(index)}
+                  onToggleFavorite={toggleFavorite}
+                />
+              </React.Fragment>
+            ))}
           </div>
           {album.tracks.length === 0 ? (
             <div className="py-10 text-center text-text-muted italic">

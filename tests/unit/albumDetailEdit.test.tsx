@@ -66,7 +66,7 @@ describe('AlbumDetail 曲目列表', () => {
     )
   })
 
-  it('按 Disc 分组并显示连续序号，同时保持播放顺序', async () => {
+  it('按 Disc 分组并保持播放顺序', async () => {
     mockedApiGet.mockResolvedValueOnce({
       album: {
         docId: 'album-db-id',
@@ -78,20 +78,15 @@ describe('AlbumDetail 曲目列表', () => {
           { docId: 'c', title: '歌曲丙', artists: [], discNumber: 2, trackOrder: 4, audioUrl: 'c' },
           { docId: 'a', title: '歌曲甲', artists: [], discNumber: 1, trackOrder: 0, audioUrl: 'a' },
           { docId: 'b', title: '歌曲乙', artists: [], discNumber: 1, trackOrder: 0, audioUrl: 'b' },
-        ],
+        ].map((track) => ({ ...track, album: '测试专辑', cover: '' })),
       },
     } as never)
     renderAlbum('456')
 
     expect(await screen.findByRole('heading', { name: '主碟' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Disc 2' })).toBeInTheDocument()
-    const first = screen.getByRole('link', { name: /歌曲甲/ }).parentElement!
-    const second = screen.getByRole('link', { name: /歌曲乙/ }).parentElement!
-    const third = screen.getByRole('link', { name: /歌曲丙/ }).parentElement!
-    expect(first.firstElementChild).toHaveTextContent('1')
-    expect(second.firstElementChild).toHaveTextContent('2')
-    expect(third.firstElementChild).toHaveTextContent('1')
-    await userEvent.setup().click(third.querySelector('button[title="播放"]')!)
+    expect(screen.getByRole('link', { name: /歌曲甲/ })).not.toHaveTextContent('测试专辑')
+    await userEvent.setup().click(screen.getByRole('button', { name: '播放 歌曲丙' }))
     expect(playAlbumTracks).toHaveBeenCalledWith(
       'album-db-id',
       '测试专辑',

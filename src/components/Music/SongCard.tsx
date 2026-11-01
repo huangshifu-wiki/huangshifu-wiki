@@ -16,6 +16,7 @@ interface SongCardProps {
   isFavoriting: boolean
   sequenceNumber?: number
   showSequenceOnMobile?: boolean
+  showAlbum?: boolean
   viewMode?: ViewMode
   onPlay: (song: SongItem) => void
   onToggleFavorite: (song: SongItem) => void
@@ -29,6 +30,7 @@ const SongCard = React.memo(function SongCard({
   isFavoriting,
   sequenceNumber,
   showSequenceOnMobile = false,
+  showAlbum = true,
   viewMode = 'list',
   onPlay,
   onToggleFavorite,
@@ -38,7 +40,9 @@ const SongCard = React.memo(function SongCard({
   const isSmallGrid = viewMode === 'small'
   const artistsText = formatMusicCredits(song.artists, '未知歌手')
   const canPlay = isPlayableSong(song)
-  const albumText = (song.displayAlbum ? song.displayAlbum.title : song.album).trim()
+  const albumText = showAlbum
+    ? (song.displayAlbum ? song.displayAlbum.title : song.album).trim()
+    : ''
   const releaseDateText = song.releaseDate || null
   const coverSrc = song.coverThumbnail || song.cover
   const bodyMeta = [artistsText, albumText].filter(Boolean)
