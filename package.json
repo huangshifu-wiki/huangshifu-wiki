@@ -31,7 +31,7 @@
     "format": "prettier --list-different .; status=$?; if [ $status -eq 1 ]; then prettier --write . --log-level warn; exit $?; fi; if [ $status -ne 0 ]; then exit $status; fi",
     "lint": "npm run check:ui && tsc --noEmit",
     "check:ui": "tsx scripts/check-ui.ts",
-    "verify": "npm run lint && npm run test:unit && npm run test:integration && npm run build",
+    "verify": "node scripts/verify.mjs",
     "test": "NODE_ENV=test vitest run --reporter=dot --silent=passed-only",
     "test:unit": "NODE_ENV=test vitest run --reporter=dot --silent=passed-only",
     "test:watch": "NODE_ENV=test vitest --reporter=dot --silent=passed-only",

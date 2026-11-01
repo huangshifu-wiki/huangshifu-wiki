@@ -750,7 +750,7 @@ npm run verify
 说明：
 
 - `npm run format`：使用 Prettier 统一格式化代码、配置和文档
-- `npm run verify`：依次执行类型检查、单元测试、集成测试和生产构建
+- `npm run verify`：调度 UI/类型检查、单元测试、集成测试和生产构建，输出各阶段及整体墙钟耗时。先并发执行 lint 与集成测试，lint 通过后启动单测和构建；可用并行度小于 4 时串行执行。测试上传目录按运行隔离并自动清理，测试数据库仍共享，不要同时启动多个完整 verify。
 
 若命令全部通过，再执行 `pm2 restart huangshifu-wiki --update-env`。
 

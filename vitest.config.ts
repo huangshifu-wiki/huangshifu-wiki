@@ -32,6 +32,10 @@ export default defineConfig({
       defineProject({
         test: {
           name: 'unit-node',
+          pool: 'threads',
+          maxWorkers: process.env.VERIFY_MAX_WORKERS
+            ? Number(process.env.VERIFY_MAX_WORKERS)
+            : undefined,
           alias: {
             '@': path.resolve(__dirname, '.'),
           },
@@ -56,6 +60,10 @@ export default defineConfig({
       defineProject({
         test: {
           name: 'unit-jsdom',
+          pool: 'vmThreads',
+          maxWorkers: process.env.VERIFY_MAX_WORKERS
+            ? Number(process.env.VERIFY_MAX_WORKERS)
+            : undefined,
           alias: {
             '@': path.resolve(__dirname, '.'),
           },

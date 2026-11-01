@@ -68,18 +68,20 @@ npm run dev
 
 ## 常用脚本
 
-| 命令                       | 用途                                   |
-| -------------------------- | -------------------------------------- |
-| `npm run dev`              | 启动 Express + Vite 开发服务           |
-| `npm run format`           | 使用 Prettier 格式化代码、配置和文档   |
-| `npm run lint`             | TypeScript 类型检查                    |
-| `npm run test:unit`        | 运行单元测试                           |
-| `npm run test:integration` | 运行集成测试                           |
-| `npm run build`            | 构建前端产物                           |
-| `npm run verify`           | 依次执行类型检查、单测、集成测试和构建 |
-| `npm run db:migrate`       | 开发环境执行 Prisma 迁移               |
-| `npm run db:deploy`        | 生产环境应用 Prisma 迁移               |
-| `npm run check:build`      | 检查构建产物体积                       |
+| 命令                       | 用途                                                         |
+| -------------------------- | ------------------------------------------------------------ |
+| `npm run dev`              | 启动 Express + Vite 开发服务                                 |
+| `npm run format`           | 使用 Prettier 格式化代码、配置和文档                         |
+| `npm run lint`             | TypeScript 类型检查                                          |
+| `npm run test:unit`        | 运行单元测试                                                 |
+| `npm run test:integration` | 运行集成测试                                                 |
+| `npm run build`            | 构建前端产物                                                 |
+| `npm run verify`           | 调度 UI/类型检查、单测、集成测试和构建，输出分阶段及整体耗时 |
+| `npm run db:migrate`       | 开发环境执行 Prisma 迁移                                     |
+| `npm run db:deploy`        | 生产环境应用 Prisma 迁移                                     |
+| `npm run check:build`      | 检查构建产物体积                                             |
+
+`verify` 先并发运行 lint 与集成测试，lint 通过后启动单测和生产构建；可用并行度小于 4 时按原顺序串行运行。单测与构建的 worker 上限为可用并行度的一半（向下取整，至少 1），独立命令保持原默认值。测试上传文件使用每次运行专属的临时目录，退出后清理，不使用调用者的 `UPLOADS_PATH`。阶段耗时包含命令启动与退出等待，整体耗时包含清理；并发阶段耗时不能直接相加。测试仍共享测试数据库，不要同时启动多个完整 `verify`。
 
 ## 部署
 

@@ -27,6 +27,7 @@ export default defineConfig({
       UPLOADS_PATH: testUploadsPath,
     },
     environment: 'node',
+    pool: 'threads',
     include: ['tests/integration/**/*.test.ts'],
     setupFiles: ['./tests/integration/setup.ts'],
     fileParallelism: false,

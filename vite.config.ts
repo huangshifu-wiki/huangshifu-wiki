@@ -26,6 +26,9 @@ export default defineConfig(({ mode }) => {
       minify: 'terser',
       sourcemap: false,
       terserOptions: {
+        maxWorkers: process.env.VERIFY_MAX_WORKERS
+          ? Number(process.env.VERIFY_MAX_WORKERS)
+          : undefined,
         compress: {
           drop_console: mode === 'production',
           drop_debugger: mode === 'production',
