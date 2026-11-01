@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react'
 import { Button } from '@/src/components/ui'
-import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from 'react-image-crop'
+import ReactCrop, { type PercentCrop, centerCrop, makeAspectCrop } from 'react-image-crop'
+import 'react-image-crop/dist/ReactCrop.css'
 import { X, Upload, Loader2 } from '@/src/components/icons'
 
 import { uploadAvatar, type UploadImageResult } from '../services/imageService'
@@ -24,9 +25,9 @@ const ALLOWED_AVATAR_MIME = new Set([
   'image/bmp',
 ])
 
-function centerAspectCrop(mediaWidth: number, mediaHeight: number, aspect: number): Crop {
+function centerAspectCrop(mediaWidth: number, mediaHeight: number, aspect: number): PercentCrop {
   return centerCrop(
-    makeAspectCrop({ unit: '%', width: 90 }, aspect, mediaWidth, mediaHeight),
+    makeAspectCrop({ unit: '%', width: 100 }, aspect, mediaWidth, mediaHeight),
     mediaWidth,
     mediaHeight
   )
@@ -35,7 +36,7 @@ function centerAspectCrop(mediaWidth: number, mediaHeight: number, aspect: numbe
 export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalProps) => {
   const presence = useFloatingPresence(open)
   const [imageSrc, setImageSrc] = useState<string>('')
-  const [crop, setCrop] = useState<Crop>()
+  const [crop, setCrop] = useState<PercentCrop>()
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   // 记录原图 MIME，用于决定输出格式（PNG 保留透明，JPG/WEBP 用有损）
@@ -57,6 +58,7 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
       setError('仅支持 JPG、PNG、WEBP、GIF、BMP 图片')
       return
     }
+    setCrop(undefined)
     setImageMime(mime)
     const reader = new FileReader()
     reader.onload = () => setImageSrc(reader.result?.toString() || '')
@@ -148,8 +150,8 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
         if (isBackdropClick(event)) handleClose()
       }}
     >
-      <div className="floating-panel w-full max-w-md flex flex-col overflow-hidden">
-        <header className="px-5 py-4 border-b border-border flex items-center justify-between">
+      <div className="floating-panel w-full max-w-md max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
+        <header className="px-5 py-4 border-b border-border flex shrink-0 items-center justify-between">
           <div>
             <h3 className="text-base font-bold text-text-primary">修改头像</h3>
             <p className="text-xs text-text-muted mt-0.5">选择图片并调整裁剪区域</p>
@@ -163,7 +165,7 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
           </button>
         </header>
 
-        <div className="px-5 py-4 space-y-4">
+        <div className="min-h-0 overflow-y-auto px-5 py-4 space-y-4">
           {!imageSrc ? (
             <div className="flex flex-col items-center justify-center py-8">
               <input
@@ -184,29 +186,32 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
             </div>
           ) : (
             <div className="flex flex-col items-center gap-4">
-              <div className="relative w-64 h-64 overflow-hidden rounded-full border-2 border-border">
+              <div className="flex w-full min-w-0 items-center justify-center rounded border border-border bg-surface-alt p-4">
                 <ReactCrop
                   crop={crop}
                   onChange={(_, percentCrop) => setCrop(percentCrop)}
                   aspect={1}
                   circularCrop
+                  style={{ maxWidth: 'min(100%, 256px)' }}
                 >
                   <img
                     ref={imgRef}
                     src={imageSrc}
                     alt="待裁剪"
                     onLoad={onImageLoad}
-                    className="max-w-none"
-                    style={{ width: 256, height: 256, objectFit: 'cover' }}
+                    className="block"
+                    // 保持原图比例，让百分比选区与导出的原图像素对应。
+                    style={{ width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: 256 }}
                   />
                 </ReactCrop>
               </div>
-              <p className="text-xs text-text-muted">拖动裁剪框调整头像区域</p>
+              <p className="text-xs text-text-muted">拖动选区调整位置，拖动边角调整大小</p>
               <Button
                 variant="secondary"
                 type="button"
                 onClick={() => {
                   setImageSrc('')
+                  setCrop(undefined)
                   if (inputRef.current) inputRef.current.value = ''
                 }}
               >
@@ -221,7 +226,7 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
           )}
         </div>
 
-        <footer className="px-5 py-3 border-t border-border bg-surface-alt/60 flex items-center justify-end gap-3">
+        <footer className="px-5 py-3 border-t border-border bg-surface-alt/60 flex shrink-0 items-center justify-end gap-3">
           <Button variant="secondary" type="button" onClick={handleClose}>
             取消
           </Button>
