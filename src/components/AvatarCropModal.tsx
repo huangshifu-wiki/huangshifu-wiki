@@ -39,8 +39,6 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
   const [crop, setCrop] = useState<PercentCrop>()
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
-  // 记录原图 MIME，用于决定输出格式（PNG 保留透明，JPG/WEBP 用有损）
-  const [imageMime, setImageMime] = useState<string>('image/jpeg')
   const imgRef = useRef<HTMLImageElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -59,7 +57,6 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
       return
     }
     setCrop(undefined)
-    setImageMime(mime)
     const reader = new FileReader()
     reader.onload = () => setImageSrc(reader.result?.toString() || '')
     reader.readAsDataURL(file)
@@ -102,10 +99,8 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
       ctx.imageSmoothingQuality = 'high'
 
       ctx.drawImage(image, cropX, cropY, sourceSize, sourceSize, 0, 0, outputSize, outputSize)
-      // PNG 保留透明通道，其它格式用 webp/jpeg 压缩
-      const outputMime = imageMime === 'image/png' ? 'image/png' : 'image/jpeg'
-      const quality = outputMime === 'image/png' ? undefined : 0.9
-      canvas.toBlob((blob) => resolve(blob), outputMime, quality)
+      // WebP 有损压缩同时保留透明通道。
+      canvas.toBlob((blob) => resolve(blob), 'image/webp', 0.8)
     })
   }
 
@@ -134,7 +129,6 @@ export const AvatarCropModal = ({ open, onClose, onSuccess }: AvatarCropModalPro
     setImageSrc('')
     setCrop(undefined)
     setError('')
-    setImageMime('image/jpeg')
     if (inputRef.current) inputRef.current.value = ''
     onClose()
   }
