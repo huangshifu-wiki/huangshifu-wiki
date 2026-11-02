@@ -18,7 +18,7 @@
 | `prisma/`              | Prisma schema、迁移和 seed                       |
 | `tests/unit/`          | 单元测试                                         |
 | `tests/integration/`   | 集成测试                                         |
-| `public/`              | 静态资源、PWA manifest、Service Worker           |
+| `public/`              | 静态资源、PWA manifest、Service Worker 退役脚本  |
 | `docs/`                | 当前维护文档                                     |
 | `scripts/`             | 部署、测试数据库、导入和维护脚本                 |
 | `miniprogram-webview/` | 微信小程序 WebView 壳                            |
@@ -42,16 +42,16 @@
 
 ## 前端结构
 
-| 路径                     | 说明                                                        |
-| ------------------------ | ----------------------------------------------------------- |
-| `src/App.tsx`            | 前端路由入口                                                |
-| `src/main.tsx`           | 根渲染、ToastProvider、ErrorBoundary 和 Service Worker 注册 |
-| `src/pages/Admin/`       | 后台管理路由和页面                                          |
-| `src/components/Navbar/` | 导航、登录弹窗和通知面板                                    |
-| `src/components/wiki/`   | Wiki 卡片、编辑器和关系图谱                                 |
-| `src/components/Music/`  | 音乐列表、歌曲卡片和筛选器                                  |
-| `src/components/search/` | 搜索框、筛选和结果卡片                                      |
-| `src/components/charts/` | ECharts 相关组件                                            |
+| 路径                     | 说明                                                          |
+| ------------------------ | ------------------------------------------------------------- |
+| `src/App.tsx`            | 前端路由入口                                                  |
+| `src/main.tsx`           | 根渲染、ToastProvider、ErrorBoundary 和旧 Service Worker 清理 |
+| `src/pages/Admin/`       | 后台管理路由和页面                                            |
+| `src/components/Navbar/` | 导航、登录弹窗和通知面板                                      |
+| `src/components/wiki/`   | Wiki 卡片、编辑器和关系图谱                                   |
+| `src/components/Music/`  | 音乐列表、歌曲卡片和筛选器                                    |
+| `src/components/search/` | 搜索框、筛选和结果卡片                                        |
+| `src/components/charts/` | ECharts 相关组件                                              |
 
 内容新建与编辑由 `src/pages/ContentEditorRoutes.tsx` 承载路由弹窗，使用 `contentEditorRoutes.ts` 和 `useContentEditorNavigation.ts` 保留来源页面、处理直达回退与保存后的详情刷新；个人设置和系统设置仍为独立页面。
 

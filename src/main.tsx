@@ -27,8 +27,18 @@ initPressFeedback()
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((e) => {
-      console.warn('[SW] Service worker registration failed:', String(e))
+    // 清理已有根作用域 Worker，不再注册新的 Worker。
+    void (async () => {
+      const registration = await navigator.serviceWorker.getRegistration('/')
+      await registration?.unregister()
+      const names = await caches.keys()
+      await Promise.all(
+        names
+          .filter((name) => name.startsWith('huangshifu-wiki-v'))
+          .map((name) => caches.delete(name))
+      )
+    })().catch((error) => {
+      console.warn('[SW] Service worker cleanup failed:', String(error))
     })
   })
 }
