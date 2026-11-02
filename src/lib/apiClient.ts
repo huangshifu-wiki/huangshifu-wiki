@@ -241,6 +241,17 @@ export function apiDownload(path: string, options: RequestInit = {}): Promise<Re
   })
 }
 
+// 让浏览器直接接收附件，避免页面缓存完整文件。
+export function startFileDownload(path: string): void {
+  const link = document.createElement('a')
+  link.href = path
+  link.target = '_blank'
+  link.rel = 'noopener noreferrer'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+}
+
 export interface ApiUploadOptions {
   signal?: AbortSignal
   onProgress?: (percent: number) => void

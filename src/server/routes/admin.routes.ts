@@ -2432,11 +2432,12 @@ router.post(
   })
 )
 
-// POST /api/admin/backup/:filename/download - Download backup
-router.post(
+// GET /api/admin/backup/:filename/download - Download backup
+router.get(
   '/backup/:filename/download',
   requireSuperAdmin,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
+    res.setHeader('Cache-Control', 'no-store')
     try {
       const filename = req.params.filename
       const normalized = path.normalize(filename)
@@ -2827,11 +2828,12 @@ router.post(
   })
 )
 
-// POST /api/admin/backup/media-reports/:filename/download - Download restore media report
-router.post(
+// GET /api/admin/backup/media-reports/:filename/download - Download restore media report
+router.get(
   '/backup/media-reports/:filename/download',
   requireSuperAdmin,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
+    res.setHeader('Cache-Control', 'no-store')
     try {
       const filename = req.params.filename
       if (!isMediaRestoreReportFilename(filename)) {

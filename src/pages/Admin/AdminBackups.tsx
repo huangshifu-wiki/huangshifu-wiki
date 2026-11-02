@@ -13,8 +13,8 @@ import {
 } from '@/src/components/icons'
 import { format } from 'date-fns'
 
-import { apiDownload, apiGet, apiPost, apiUpload } from '../../lib/apiClient'
-import { getApiErrorMessage, getErrorMessage } from '../../lib/errorHandler'
+import { apiGet, apiPost, apiUpload, startFileDownload } from '../../lib/apiClient'
+import { getErrorMessage } from '../../lib/errorHandler'
 import { CONTENT_LIMITS } from '../../lib/contentLimits'
 import { validateMaxLength } from '../../lib/clientValidation'
 import { Input, Textarea, Button, LoadErrorState } from '@/src/components/ui'
@@ -191,42 +191,13 @@ const AdminBackups = () => {
     }
   }
 
-  const downloadFile = async (
-    url: string,
-    filename: string,
-    options: { loadingKey: string; successMessage: string; errorMessage: string }
-  ) => {
-    if (actionLoading) return
-    setActionLoading(options.loadingKey)
+  const handleDownload = (filename: string) => {
+    if (actionLoading !== null) return
     try {
-      const response = await apiDownload(url, { method: 'POST' })
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        throw new Error(getApiErrorMessage(data) || options.errorMessage)
-      }
-      const blob = await response.blob()
-      const objectUrl = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = objectUrl
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(objectUrl)
-      show(options.successMessage, { variant: 'success' })
+      startFileDownload(`/api/admin/backup/${encodeURIComponent(filename)}/download`)
     } catch (error) {
-      show(getErrorMessage(error, options.errorMessage), { variant: 'error' })
-    } finally {
-      setActionLoading(null)
+      show(getErrorMessage(error, '下载失败'), { variant: 'error' })
     }
-  }
-
-  const handleDownload = async (filename: string) => {
-    await downloadFile(`/api/admin/backup/${encodeURIComponent(filename)}/download`, filename, {
-      loadingKey: 'download',
-      successMessage: '下载完成',
-      errorMessage: '下载失败',
-    })
   }
 
   const handleRestore = async () => {
@@ -307,16 +278,13 @@ const AdminBackups = () => {
     setDialog('note')
   }
 
-  const handleDownloadMediaReport = async (filename: string) => {
-    await downloadFile(
-      `/api/admin/backup/media-reports/${encodeURIComponent(filename)}/download`,
-      filename,
-      {
-        loadingKey: 'media-report-download',
-        successMessage: '图片清单下载完成',
-        errorMessage: '下载图片清单失败',
-      }
-    )
+  const handleDownloadMediaReport = (filename: string) => {
+    if (actionLoading !== null) return
+    try {
+      startFileDownload(`/api/admin/backup/media-reports/${encodeURIComponent(filename)}/download`)
+    } catch (error) {
+      show(getErrorMessage(error, '下载图片清单失败'), { variant: 'error' })
+    }
   }
 
   if (loading && backups.length === 0) {
@@ -501,6 +469,8 @@ const AdminBackups = () => {
                       备注
                     </Button>
                     <Button
+                      type="button"
+                      disabled={actionLoading !== null}
                       onClick={() => handleDownload(backup.filename)}
                       variant="secondary"
                       appearance="plain"
