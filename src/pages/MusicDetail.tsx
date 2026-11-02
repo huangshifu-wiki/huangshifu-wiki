@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useRef, useState } from 'react'
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import {
   Clock,
@@ -7,6 +7,7 @@ import {
   Heart,
   MessageSquare,
   Music,
+  Images,
   Play,
   ChevronDown,
   ChevronUp,
@@ -32,6 +33,7 @@ import { toDateValue } from '../lib/dateUtils'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { formatTime } from '../lib/formatUtils'
 import { isPlayableSong } from '../lib/musicPlayback'
+import { buildMusicCoverGallery } from '../lib/musicCovers'
 import { parseLyrics } from '../lib/lrcParser'
 import {
   getDetailFallbackSeo,
@@ -42,6 +44,7 @@ import {
 } from '../lib/seo'
 import type { SeoMetadata } from '../lib/seo'
 import type { MusicExternalSource } from '../types/entities'
+import type { MusicCover } from '../types/api'
 import { routeLoaders } from '../lib/routePrefetch'
 
 const SongFormModal = routeLoaders.SongForm.Component
@@ -87,6 +90,7 @@ type SongItem = {
   album: string
   cover: string
   coverThumbnail?: string
+  covers?: MusicCover[]
   audioUrl: string
   lyric?: string | null
   lyricPlain?: string | null
@@ -257,12 +261,15 @@ const MusicDetail = () => {
   }
 
   useEffect(() => {
+    setCoverLightboxOpen(false)
     void fetchData()
     return () => {
       requestRef.current += 1
       postsRequestRef.current += 1
     }
   }, [songId, user?.uid])
+
+  const coverGallery = useMemo(() => buildMusicCoverGallery(song), [song])
 
   // SEO 元数据：加载中/失败不可索引，成功后输出歌曲详情与 MusicRecording JSON-LD
   const songPath = `/music/${songId}`
@@ -403,7 +410,8 @@ const MusicDetail = () => {
                 type="button"
                 data-press-feedback="ripple"
                 onClick={() => setCoverLightboxOpen(true)}
-                className="h-40 w-40 flex-shrink-0 overflow-hidden rounded-lg shadow-[0_12px_48px_rgba(42,37,32,0.08)] transition-shadow duration-400 hover:shadow-[0_16px_56px_rgba(42,37,32,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary press-feedback-cover sm:h-44 sm:w-44"
+                disabled={coverGallery.images.length === 0}
+                className="relative h-40 w-40 flex-shrink-0 overflow-hidden rounded-lg shadow-[0_12px_48px_rgba(42,37,32,0.08)] transition-shadow duration-400 hover:shadow-[0_16px_56px_rgba(42,37,32,0.12)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary press-feedback-cover sm:h-44 sm:w-44"
                 aria-label={`查看 ${song.title} 封面原图`}
               >
                 <SmartImage
@@ -413,6 +421,15 @@ const MusicDetail = () => {
                   style={{ filter: COVER_FILTER }}
                   fallback={<CoverPlaceholder icon={<Music size={24} />} label="无封面" />}
                 />
+                {coverGallery.images.length > 1 && (
+                  <span
+                    role="img"
+                    aria-label="多张封面"
+                    className="pointer-events-none absolute bottom-2 right-2 rounded-sm bg-surface/50 p-1 text-text-secondary/70"
+                  >
+                    <Images size={12} aria-hidden="true" />
+                  </span>
+                )}
               </button>
               <div className="flex-1 flex flex-col justify-center min-w-0">
                 <h1 className="mobile-page-title mb-2">{song.title}</h1>
@@ -697,15 +714,8 @@ const MusicDetail = () => {
 
       <Lightbox
         open={coverLightboxOpen}
-        images={[
-          {
-            id: song.docId,
-            url: coverPreviewSrc,
-            originalUrl: song.cover,
-            name: `${song.title} 封面`,
-          },
-        ]}
-        initialIndex={0}
+        images={coverGallery.images}
+        initialIndex={coverGallery.initialIndex}
         onClose={() => setCoverLightboxOpen(false)}
       />
       {isAdmin && editing && (

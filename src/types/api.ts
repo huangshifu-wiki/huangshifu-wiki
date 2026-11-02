@@ -14,6 +14,14 @@ import type {
 } from './entities'
 import type { Platform } from './common'
 
+export interface MusicCover {
+  id: string
+  url: string
+  thumbnailUrl?: string | null
+  isDefault: boolean
+  sortOrder: number
+}
+
 export interface PersonalApiKey {
   id: string
   name: string

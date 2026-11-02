@@ -15,6 +15,7 @@ import { Lightbox } from '../components/Lightbox'
 import { toDateValue } from '../lib/dateUtils'
 import { SongCard } from '../components/Music/SongCard'
 import { isPlayableSong } from '../lib/musicPlayback'
+import { buildMusicCoverGallery } from '../lib/musicCovers'
 import {
   getDetailFallbackSeo,
   SEO_SITE_NAME,
@@ -25,6 +26,7 @@ import {
 import type { SeoMetadata } from '../lib/seo'
 import { Button, LoadErrorState } from '@/src/components/ui'
 import type { MusicExternalSource, SongItem as MusicSong } from '../types/entities'
+import type { MusicCover } from '../types/api'
 
 import { routeLoaders } from '../lib/routePrefetch'
 
@@ -44,6 +46,7 @@ type AlbumResponse = {
     artist: string
     cover: string
     coverThumbnail?: string
+    covers?: MusicCover[]
     description?: string | null
     tags?: string[]
     sources?: MusicExternalSource[]
@@ -124,7 +127,10 @@ const AlbumDetail = () => {
 
   const playableTracks = useMemo(() => sortedTracks.filter(isPlayableSong), [sortedTracks])
 
+  const coverGallery = useMemo(() => buildMusicCoverGallery(album), [album])
+
   useEffect(() => {
+    setCoverLightboxOpen(false)
     if (!albumId) {
       previousAlbumIdRef.current = undefined
       setLoading(false)
@@ -312,6 +318,7 @@ const AlbumDetail = () => {
             type="button"
             data-press-feedback="ripple"
             onClick={() => setCoverLightboxOpen(true)}
+            disabled={coverGallery.images.length === 0}
             className="h-40 w-40 flex-shrink-0 overflow-hidden rounded bg-surface-alt transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-theme-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary press-feedback-cover sm:h-44 sm:w-44"
             aria-label={`查看 ${album.title} 封面原图`}
           >
@@ -455,15 +462,8 @@ const AlbumDetail = () => {
 
       <Lightbox
         open={coverLightboxOpen}
-        images={[
-          {
-            id: album.docId,
-            url: coverPreviewSrc,
-            originalUrl: album.cover,
-            name: `${album.title} 封面`,
-          },
-        ]}
-        initialIndex={0}
+        images={coverGallery.images}
+        initialIndex={coverGallery.initialIndex}
         onClose={() => setCoverLightboxOpen(false)}
       />
       {isAdmin && editing && (
