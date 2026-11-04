@@ -1,5 +1,5 @@
 import {
-  Calendar,
+  Book,
   ChevronRight,
   Megaphone,
   MessageSquare,
@@ -12,45 +12,38 @@ import { Link } from 'react-router-dom'
 interface MoreEntry {
   to: string
   label: string
-  description: string
   Icon: typeof Megaphone
 }
 
 const MORE_ENTRIES: MoreEntry[] = [
   {
-    to: '/events',
-    label: '游记',
-    description: '浏览演出与活动游记',
-    Icon: Calendar,
+    to: '/wiki',
+    label: '百科',
+    Icon: Book,
   },
   {
     to: '/forum',
     label: '论坛',
-    description: '浏览帖子，参与社区讨论',
     Icon: MessageSquare,
   },
   {
     to: '/announcements',
     label: '公告',
-    description: '查看站点最新公告与历史公告',
     Icon: Megaphone,
   },
   {
     to: '/tickets',
     label: '盘票',
-    description: '浏览与发布演出票转让求购信息',
     Icon: Ticket,
   },
   {
     to: '/search',
     label: '搜索',
-    description: '搜索百科、音乐、活动、图集和社区内容',
     Icon: Search,
   },
   {
     to: '/settings/profile',
     label: '设置',
-    description: '维护公开资料、内容、隐私和外观偏好',
     Icon: Settings,
   },
 ]
@@ -72,7 +65,7 @@ const More = () => {
 
         <nav aria-label="更多功能入口">
           <ul className="bg-surface border border-border rounded overflow-hidden">
-            {MORE_ENTRIES.map(({ to, label, description, Icon }) => (
+            {MORE_ENTRIES.map(({ to, label, Icon }) => (
               <li key={to} className="border-b border-border last:border-b-0">
                 <Link
                   to={to}
@@ -80,9 +73,8 @@ const More = () => {
                   data-pressable
                 >
                   <Icon size={20} className="text-brand-gold shrink-0" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium text-text-primary">{label}</span>
-                    <span className="block text-xs text-text-muted mt-0.5">{description}</span>
+                  <span className="min-w-0 flex-1 text-sm font-medium text-text-primary">
+                    {label}
                   </span>
                   <ChevronRight size={16} className="text-text-muted shrink-0" />
                 </Link>

@@ -1,12 +1,12 @@
 import { NavLink } from 'react-router-dom'
-import { Music, Book, Image as ImageIcon, Home, Ellipsis } from '@/src/components/icons'
+import { Music, Calendar, Image as ImageIcon, Home, Ellipsis } from '@/src/components/icons'
 import { clsx } from 'clsx'
 
 const ITEMS = [
   { to: '/', icon: Home, label: '首页' },
   { to: '/music', icon: Music, label: '音乐' },
   { to: '/gallery', icon: ImageIcon, label: '画廊' },
-  { to: '/wiki', icon: Book, label: '百科' },
+  { to: '/events', icon: Calendar, label: '游记' },
   { to: '/more', icon: Ellipsis, label: '更多' },
 ]
 
