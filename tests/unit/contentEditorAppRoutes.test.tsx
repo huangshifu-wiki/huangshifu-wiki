@@ -63,9 +63,6 @@ vi.mock('../../src/context/MusicContext', async () => {
   }
 })
 
-vi.mock('../../src/hooks/useNetworkStatus', () => ({
-  useNetworkStatus: () => ({ isOnline: true }),
-}))
 vi.mock('../../src/lib/setup', () => ({
   getSetupStatus: () => Promise.resolve({ initialized: true, requiresSetup: false }),
 }))

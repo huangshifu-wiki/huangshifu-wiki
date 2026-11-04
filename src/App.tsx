@@ -2,7 +2,6 @@ import React, { lazy, Suspense } from 'react'
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { MusicProvider, useMusic } from './context/MusicContext'
-import { useNetworkStatus } from './hooks/useNetworkStatus'
 
 import { Navbar } from './components/Navbar'
 import { BackLinkTracker } from './components/SmartBackLink'
@@ -68,7 +67,6 @@ function RoutePreloader() {
 const MainLayout = () => {
   const { currentSong } = useMusic()
   const { user, loading: authLoading } = useAuth()
-  const { isOnline } = useNetworkStatus()
   const location = useLocation()
   const viewLocation = getContentBackgroundLocation(location)
   const path = viewLocation.pathname
@@ -139,14 +137,6 @@ const MainLayout = () => {
   return (
     <div className="min-h-screen flex flex-col">
       {layoutSeo && <Seo metadata={layoutSeo} />}
-      {!isOnline && (
-        <div
-          className="bg-amber-500 text-white text-center py-1.5 px-4 text-sm font-medium fixed top-0 left-0 right-0 z-[300]"
-          role="alert"
-        >
-          网络连接已断开，部分功能可能不可用
-        </div>
-      )}
       <AnnouncementBar />
       {/* 无障碍跳转导航 - 键盘用户可快速跳转到主内容区 */}
       <a
