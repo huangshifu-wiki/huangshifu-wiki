@@ -11,12 +11,8 @@
 
 @theme {
   --font-serif: 'Source Han Serif SC', 'Noto Serif SC', 'Songti SC', 'SimSun', serif;
-  --font-body:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', 'Noto Sans SC', sans-serif;
-  --font-sans:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  --font-body: sans-serif;
+  --font-sans: sans-serif;
 
   /* 普通主题 - 原站米白 / 金棕色系 */
   --color-brand-primary: var(--home-gold);
