@@ -1,5 +1,6 @@
 import type { Router } from 'express'
 import multer from 'multer'
+import { rename } from 'node:fs/promises'
 import { prisma } from '../prisma'
 import { requireAuth, requireActiveUser, requireAdmin } from '../middleware/auth'
 import type { AuthenticatedRequest } from '../types'
@@ -38,7 +39,7 @@ const router = createRouter()
 
 // 配置 multer 用于处理文件上传
 // 使用与 validateUploadedImage 一致的扩展名 + MIME 白名单（JPG/PNG/WEBP/GIF/BMP），
-// 拒绝 SVG/AVIF/HEIC 等可能携带脚本或服务端不支持的格式。
+// 拒绝 SVG/AVIF/HEIC 等不支持的格式；最终格式与保存后缀以文件内容为准。
 const ALLOWED_UPLOAD_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'])
 const ALLOWED_UPLOAD_MIME_TYPES = new Set([
   'image/jpeg',
@@ -183,11 +184,20 @@ router.post(
         return
       }
 
-      const { mimeType } = await validateUploadedImage(file)
+      const { mimeType, extension } = await validateUploadedImage(file)
+      const normalizedFilename = `${path.basename(file.filename, path.extname(file.filename))}${extension}`
+      const normalizedPath = path.join(path.dirname(file.path), normalizedFilename)
+      if (normalizedPath !== file.path) {
+        await rename(file.path, normalizedPath)
+        file.filename = normalizedFilename
+        file.path = normalizedPath
+      }
+      const originalFileName =
+        path.basename(file.originalname, path.extname(file.originalname)) + extension
       const result = await createOrReuseUploadedAsset({
         ownerUid: req.authUser!.uid,
         tempFilePath: file.path,
-        originalFileName: file.originalname,
+        originalFileName,
         mimeType,
         sizeBytes: file.size,
         sessionId,

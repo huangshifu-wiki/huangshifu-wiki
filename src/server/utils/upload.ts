@@ -337,9 +337,17 @@ export async function deleteFromSuperbed(
 
 // ─── 图片校验 ───────────────────────────────────────────────────────
 
+const IMAGE_EXTENSIONS_BY_MIME: Record<string, string[]> = {
+  'image/jpeg': ['.jpg', '.jpeg'],
+  'image/png': ['.png'],
+  'image/webp': ['.webp'],
+  'image/gif': ['.gif'],
+  'image/bmp': ['.bmp'],
+}
+
 export async function validateUploadedImage(
   file: Express.Multer.File
-): Promise<{ mimeType: string }> {
+): Promise<{ mimeType: string; extension: string }> {
   const ext = path.extname(file.originalname).toLowerCase()
   if (!(allowedImageExtensions as Set<string>).has(ext)) {
     throw new Error('不支持的图片扩展名')
@@ -351,21 +359,11 @@ export async function validateUploadedImage(
     throw new Error('文件内容与图片格式不匹配')
   }
 
-  const expectedMimeByExt: Record<string, string> = {
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.png': 'image/png',
-    '.webp': 'image/webp',
-    '.gif': 'image/gif',
-    '.bmp': 'image/bmp',
-  }
-  const expectedMimeType = expectedMimeByExt[ext]
-  if (!expectedMimeType || detectedMimeType !== expectedMimeType) {
-    throw new Error('图片扩展名与文件内容不一致')
-  }
+  const extensions = IMAGE_EXTENSIONS_BY_MIME[detectedMimeType]
 
   return {
     mimeType: detectedMimeType,
+    extension: extensions.includes(ext) ? ext : extensions[0],
   }
 }
 
