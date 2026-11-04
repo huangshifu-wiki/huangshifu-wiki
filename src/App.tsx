@@ -33,6 +33,7 @@ const Home = routeLoaders.Home.Component
 const Wiki = routeLoaders.Wiki.Component
 const UserProfile = routeLoaders.UserProfile.Component
 const Settings = routeLoaders.Settings.Component
+const Notifications = routeLoaders.Notifications.Component
 const Forum = routeLoaders.Forum.Component
 const Music = routeLoaders.Music.Component
 const Gallery = routeLoaders.Gallery.Component
@@ -189,6 +190,14 @@ const MainLayout = () => {
                     description="登录后可以维护公开资料、内容、隐私、账户信息和外观偏好。"
                   >
                     <Settings />
+                  </RouteGuard>
+                }
+              />
+              <Route
+                path="/notifications"
+                element={
+                  <RouteGuard>
+                    <Notifications />
                   </RouteGuard>
                 }
               />

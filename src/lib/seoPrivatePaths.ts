@@ -1,5 +1,6 @@
 const PRIVATE_EXACT_PATHS = new Set([
   '/login',
+  '/notifications',
   '/forgot-password',
   '/reset-password',
   '/verify-email',

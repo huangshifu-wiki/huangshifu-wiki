@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -32,7 +33,12 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-const renderPanel = () => render(<NotificationPanel onNavigate={vi.fn()} />)
+const renderPanel = () =>
+  render(
+    <MemoryRouter>
+      <NotificationPanel onNavigate={vi.fn()} />
+    </MemoryRouter>
+  )
 
 const openPanel = () => {
   fireEvent.click(screen.getByRole('button', { name: '通知' }))

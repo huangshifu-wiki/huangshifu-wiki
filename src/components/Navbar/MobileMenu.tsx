@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type Ref } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { LogOut, Search as SearchIcon } from '@/src/components/icons'
+import { Bell, LogOut, Search as SearchIcon } from '@/src/components/icons'
 import type { FloatingPresence } from '../../hooks/useFloatingPresence'
 import { useAuth } from '../../context/AuthContext'
 import { DEFAULT_AVATAR, handleAvatarError } from '../../lib/defaultAvatar'
@@ -94,13 +94,13 @@ export const MobileMenu = ({
 
           {!loading && (
             <div className={styles.siteMobileAccount}>
-              <div className="flex gap-3">
+              <div className={user ? 'grid grid-cols-3 gap-2' : 'flex gap-3'}>
                 {user ? (
                   <>
                     <Button
                       asChild
                       variant="ghost"
-                      className={`${styles.siteMobileSoftAction} hover:bg-[color-mix(in_srgb,var(--home-gold)_13%,transparent)] min-h-11 min-w-0 flex-1 rounded-lg`}
+                      className={`${styles.siteMobileSoftAction} hover:bg-[color-mix(in_srgb,var(--home-gold)_13%,transparent)] min-h-11 min-w-0 gap-1.5 rounded-lg px-2`}
                     >
                       <Link to={`/users/${user.publicId}`} aria-label={`${displayName}的个人资料`}>
                         <img
@@ -114,10 +114,20 @@ export const MobileMenu = ({
                       </Link>
                     </Button>
                     <Button
+                      asChild
+                      variant="ghost"
+                      className={`${styles.siteMobileSoftAction} hover:bg-[color-mix(in_srgb,var(--home-gold)_13%,transparent)] min-h-11 min-w-0 gap-1.5 rounded-lg px-2`}
+                    >
+                      <Link to="/notifications">
+                        <Bell size={16} />
+                        <span>通知</span>
+                      </Link>
+                    </Button>
+                    <Button
                       type="button"
                       variant="ghost"
                       onClick={() => void onLogout()}
-                      className={`${styles.siteMobileSoftAction} hover:bg-[color-mix(in_srgb,var(--home-gold)_13%,transparent)] min-h-11 flex-1 rounded-lg`}
+                      className={`${styles.siteMobileSoftAction} hover:bg-[color-mix(in_srgb,var(--home-gold)_13%,transparent)] min-h-11 min-w-0 gap-1.5 rounded-lg px-2`}
                     >
                       <LogOut size={16} />
                       <span>退出登录</span>

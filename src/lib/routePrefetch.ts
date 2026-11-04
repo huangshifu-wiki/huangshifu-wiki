@@ -17,6 +17,7 @@ export const routeLoaders = {
   UserProfile: moduleLoader(() => import('../pages/UserProfile')),
   Settings: moduleLoader(() => import('../pages/Settings')),
   Announcements: moduleLoader(() => import('../pages/Announcements')),
+  Notifications: moduleLoader(() => import('../pages/Notifications')),
   Login: moduleLoader(() => import('../pages/Login')),
   ForgotPassword: moduleLoader(() => import('../pages/ForgotPassword')),
   ResetPassword: moduleLoader(() => import('../pages/ResetPassword')),
@@ -62,6 +63,7 @@ const anonymous: PrefetchAccess = { authenticated: false, admin: false }
 const priorityRank = { idle: 0, context: 1, intent: 2 }
 const requiredAccess: Partial<Record<ModuleName, keyof PrefetchAccess>> = {
   Settings: 'authenticated',
+  Notifications: 'authenticated',
   PostEditor: 'authenticated',
   WikiEditor: 'authenticated',
   GalleryEditor: 'authenticated',
@@ -112,6 +114,8 @@ export function getRouteModule(pathname: string): ModuleName | undefined {
       return 'More'
     case '/announcements':
       return 'Announcements'
+    case '/notifications':
+      return 'Notifications'
     case '/login':
       return 'Login'
     case '/verify-email':

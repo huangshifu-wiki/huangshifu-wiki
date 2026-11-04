@@ -226,7 +226,7 @@
   background: color-mix(in srgb, var(--home-gold) 8%, transparent);
 }
 
-/* 账户入口的头像与昵称：昵称过长时省略号截断，保持两列等宽不撑破 */
+/* 账户入口的头像与昵称：窄屏长昵称省略，避免挤压账户操作 */
 .siteMobileProfileAvatar {
   width: 1.5rem;
   height: 1.5rem;

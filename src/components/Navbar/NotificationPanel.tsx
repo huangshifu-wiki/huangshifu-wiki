@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Bell } from '@/src/components/icons'
 import { clsx } from 'clsx'
 import { useAuth } from '../../context/AuthContext'
@@ -190,6 +191,15 @@ export const NotificationPanel = React.memo(({ onNavigate }: NotificationPanelPr
             ))
           )}
         </div>
+        <Button
+          asChild
+          variant="ghost"
+          className="w-full rounded-none border-t-border text-brand-gold"
+        >
+          <Link to="/notifications" onClick={() => setNotifPanelOpen(false)}>
+            查看全部通知
+          </Link>
+        </Button>
       </DropdownPanel>
     </div>
   )
