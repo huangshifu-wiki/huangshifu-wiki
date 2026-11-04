@@ -284,12 +284,7 @@ export const AdminLayout = () => {
   }
 
   return (
-    <div
-      className="admin-shell h-screen flex flex-col overflow-hidden bg-[var(--color-bg-antique)]"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-      }}
-    >
+    <div className="admin-shell antique-page h-screen flex flex-col overflow-hidden">
       {/* Header */}
       <header className="h-14 border-b border-[var(--book-ink-line)] bg-[var(--book-panel-bg-strong)] backdrop-blur-[14px] flex items-center justify-between px-4 md:px-6 z-50 shrink-0 shadow-[0_1px_0_rgba(138,109,47,0.06)]">
         <div className="flex items-center gap-3">

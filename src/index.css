@@ -76,7 +76,10 @@
   --home-shadow-md: 0 4px 20px rgba(42, 37, 32, 0.06);
   --home-shadow-lg: 0 12px 48px rgba(42, 37, 32, 0.08);
   --home-font-display: 'Ma Shan Zheng HSF', 'STKaiti', 'KaiTi', cursive;
-  --home-font-body: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
+  --font-brand-body: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
+  --home-font-body: var(--font-brand-body);
+  --font-antique-body:
+    'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif;
   --book-bg-image:
     radial-gradient(ellipse at 12% 4%, rgba(148, 48, 42, 0.055), transparent 34%),
     radial-gradient(ellipse at 88% 10%, rgba(138, 109, 47, 0.08), transparent 38%),
@@ -207,6 +210,14 @@
   --hover-scale: 0.95;
 
   /* 超大字体排版 */
+}
+
+/* 系统字体模式不改变品牌字标。 */
+html[data-font='system'] {
+  --font-serif: var(--font-sans);
+  --home-font-body: var(--font-sans);
+  --book-title-font: var(--font-sans);
+  --font-antique-body: var(--font-sans);
 }
 
 /* Admin button background utilities */
@@ -1418,7 +1429,7 @@ a[href]:not([data-press-feedback='none']),
 .antique-page,
 .antique-detail,
 .mobile-page-shell {
-  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif;
+  font-family: var(--font-antique-body);
 }
 
 .antique-page,

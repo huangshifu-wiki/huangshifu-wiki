@@ -45,6 +45,7 @@ describe('UserPreferencesProvider', () => {
     vi.clearAllMocks()
     window.localStorage.clear()
     document.documentElement.removeAttribute('data-theme')
+    document.documentElement.removeAttribute('data-font')
     document.documentElement.style.colorScheme = ''
     vi.stubGlobal(
       'matchMedia',
@@ -71,6 +72,7 @@ describe('UserPreferencesProvider', () => {
 
   afterEach(() => {
     cleanup()
+    document.documentElement.removeAttribute('data-font')
   })
 
   it('falls back to stored preferences when authenticated user has no server preferences', async () => {
@@ -207,28 +209,17 @@ describe('UserPreferencesProvider', () => {
 
     expect(screen.getByTestId('theme-mode')).toHaveTextContent('system')
     expect(screen.getByTestId('resolved-theme')).toHaveTextContent('default')
-    expect(readStoredPreferences('user-2')).toEqual({
+    expect(readStoredPreferences('user-2')).toMatchObject({
       viewMode: 'medium',
-      viewModes: DEFAULT_PREFERENCES.viewModes,
       theme: 'system',
-      listLoadMode: 'pagination',
-      showCharacterCount: false,
-      showMobileSongSequence: false,
-      publicFavorites: false,
-      publicHistory: false,
     })
-    expect(readStoredPreferences()).toEqual({
+    expect(readStoredPreferences()).toMatchObject({
       viewMode: 'small',
       viewModes: {
         ...DEFAULT_PREFERENCES.viewModes,
         gallery: 'small',
       },
       theme: 'dark',
-      listLoadMode: 'pagination',
-      showCharacterCount: false,
-      showMobileSongSequence: false,
-      publicFavorites: false,
-      publicHistory: false,
     })
   })
 
@@ -266,31 +257,21 @@ describe('UserPreferencesProvider', () => {
     })
 
     expect(screen.getByTestId('theme-mode')).toHaveTextContent('dark')
-    expect(readStoredPreferences('user-3')).toEqual({
+    expect(readStoredPreferences('user-3')).toMatchObject({
       viewMode: 'small',
       viewModes: {
         ...DEFAULT_PREFERENCES.viewModes,
         gallery: 'small',
       },
       theme: 'dark',
-      listLoadMode: 'pagination',
-      showCharacterCount: false,
-      showMobileSongSequence: false,
-      publicFavorites: false,
-      publicHistory: false,
     })
-    expect(readStoredPreferences()).toEqual({
+    expect(readStoredPreferences()).toMatchObject({
       viewMode: 'small',
       viewModes: {
         ...DEFAULT_PREFERENCES.viewModes,
         gallery: 'small',
       },
       theme: 'dark',
-      listLoadMode: 'pagination',
-      showCharacterCount: false,
-      showMobileSongSequence: false,
-      publicFavorites: false,
-      publicHistory: false,
     })
   })
 

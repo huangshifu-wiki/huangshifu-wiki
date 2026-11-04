@@ -63,7 +63,7 @@
 
 .siteBrand small {
   color: var(--home-text-2);
-  font-family: var(--home-font-body);
+  font-family: var(--font-brand-body);
   font-size: 0.65rem;
   font-weight: 300;
   letter-spacing: 0.18em;

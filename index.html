@@ -56,6 +56,10 @@
               : mode
           var root = document.documentElement
           root.setAttribute('data-theme', resolved)
+          root.setAttribute(
+            'data-font',
+            source && source.useSpecialFonts === false ? 'system' : 'special'
+          )
           root.style.colorScheme = resolved === 'dark' ? 'dark' : 'light'
           var meta = document.querySelector('meta[name="theme-color"]')
           if (meta) {

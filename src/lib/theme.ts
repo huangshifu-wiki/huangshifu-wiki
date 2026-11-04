@@ -95,6 +95,9 @@ export function normalizeStoredPreferences(
     viewMode: normalizeViewMode(value?.viewMode),
     viewModes: normalizeScopedViewModes(value?.viewModes, value?.viewMode),
     theme: normalizeThemeMode(value?.theme),
+    useSpecialFonts: isBooleanPreference(value?.useSpecialFonts)
+      ? value.useSpecialFonts
+      : DEFAULT_PREFERENCES.useSpecialFonts,
     listLoadMode: normalizeListLoadMode(value?.listLoadMode),
     showCharacterCount: isBooleanPreference(value?.showCharacterCount)
       ? value.showCharacterCount
@@ -123,6 +126,7 @@ export function hasStoredPreferenceValues(
     (isRecord(value.viewModes) &&
       VIEW_MODE_SCOPES.some((scope) => isViewMode(value.viewModes?.[scope]))) ||
     isThemeMode(value.theme) ||
+    isBooleanPreference(value.useSpecialFonts) ||
     isListLoadMode(value.listLoadMode) ||
     isBooleanPreference(value.showCharacterCount) ||
     isBooleanPreference(value.showMobileSongSequence) ||
@@ -158,6 +162,9 @@ export function mergeStoredPreferences(
         ? normalizeScopedViewModes(undefined, value.viewMode)
         : normalizedBase.viewModes,
     theme: isThemeMode(value.theme) ? value.theme : normalizedBase.theme,
+    useSpecialFonts: isBooleanPreference(value.useSpecialFonts)
+      ? value.useSpecialFonts
+      : normalizedBase.useSpecialFonts,
     listLoadMode: isListLoadMode(value.listLoadMode)
       ? value.listLoadMode
       : normalizedBase.listLoadMode,
@@ -343,4 +350,13 @@ export function applyResolvedTheme(theme: ResolvedTheme): void {
   if (meta) {
     meta.setAttribute('content', metaColor)
   }
+}
+
+/** 将字体偏好应用到页面，品牌字标由独立字体变量保留。 */
+export function applyFontPreference(useSpecialFonts: boolean): void {
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  document.documentElement.setAttribute('data-font', useSpecialFonts ? 'special' : 'system')
 }

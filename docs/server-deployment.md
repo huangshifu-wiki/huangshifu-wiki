@@ -956,23 +956,25 @@ npm run download:sensitive-words
 
 ## 附录：主要数据库表
 
-| 表名                 | 说明                                                 |
-| -------------------- | ---------------------------------------------------- |
-| `User`               | 用户账号（包含 `preferences` JSON 字段存储视图偏好） |
-| `Post`               | 论坛帖子                                             |
-| `PostComment`        | 评论（支持关联 `Post` 或 `Gallery`）                 |
-| `WikiPage`           | Wiki 页面                                            |
-| `Gallery`            | 图集（支持版权标识 `copyright` 字段）                |
-| `MusicTrack`         | 音乐曲目                                             |
-| `Album`              | 专辑                                                 |
-| `MediaAsset`         | 媒体资产                                             |
-| `ImageEmbedding`     | 图片向量                                             |
-| `TextEmbeddingChunk` | 文本向量分块（wiki/post/music/album 四种来源）       |
-| `ImageMap`           | 图片映射（blurhash、S3 URL、本地和外部图床 URL）     |
-| `Region`             | 行政区划                                             |
-| `EditLock`           | 编辑锁                                               |
-| `WikiBranch`         | Wiki 分支                                            |
-| `WikiPullRequest`    | Wiki PR                                              |
+用户可在“设置 → 外观”关闭“使用特殊字体”，改用系统字体，Logo 保持原样。该选项默认开启，通过 `User.preferences.useSpecialFonts` 保存，无需数据库迁移；本地缓存用于在首帧加载时应用选择。
+
+| 表名                 | 说明                                                    |
+| -------------------- | ------------------------------------------------------- |
+| `User`               | 用户账号（`preferences` JSON 存储视图、主题和字体偏好） |
+| `Post`               | 论坛帖子                                                |
+| `PostComment`        | 评论（支持关联 `Post` 或 `Gallery`）                    |
+| `WikiPage`           | Wiki 页面                                               |
+| `Gallery`            | 图集（支持版权标识 `copyright` 字段）                   |
+| `MusicTrack`         | 音乐曲目                                                |
+| `Album`              | 专辑                                                    |
+| `MediaAsset`         | 媒体资产                                                |
+| `ImageEmbedding`     | 图片向量                                                |
+| `TextEmbeddingChunk` | 文本向量分块（wiki/post/music/album 四种来源）          |
+| `ImageMap`           | 图片映射（blurhash、S3 URL、本地和外部图床 URL）        |
+| `Region`             | 行政区划                                                |
+| `EditLock`           | 编辑锁                                                  |
+| `WikiBranch`         | Wiki 分支                                               |
+| `WikiPullRequest`    | Wiki PR                                                 |
 
 ---
 

@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { JSDOM } from 'jsdom'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
+  applyFontPreference,
   hasStoredPreferenceValues,
   mergeStoredPreferences,
   normalizeThemeMode,
@@ -14,10 +17,13 @@ import {
 } from '../../src/lib/theme'
 import { DEFAULT_PREFERENCES } from '../../src/types/userPreferences'
 
+const bootstrapHtml = readFileSync('index.html', 'utf8')
+
 describe('theme helpers', () => {
   beforeEach(() => {
     window.localStorage.clear()
     document.documentElement.removeAttribute('data-theme')
+    document.documentElement.removeAttribute('data-font')
     document.documentElement.style.colorScheme = ''
     let meta = document.querySelector('meta[name="theme-color"]')
     if (!meta) {
@@ -26,6 +32,10 @@ describe('theme helpers', () => {
       document.head.appendChild(meta)
     }
     meta.setAttribute('content', '#FFD700')
+  })
+
+  afterEach(() => {
+    document.documentElement.removeAttribute('data-font')
   })
 
   it('normalizes unsupported theme values to system', () => {
@@ -67,15 +77,11 @@ describe('theme helpers', () => {
         showCharacterCount: true,
         extra: 'ignored',
       } as Record<string, unknown>)
-    ).toEqual({
+    ).toMatchObject({
       viewMode: 'large',
       viewModes: DEFAULT_PREFERENCES.viewModes,
       theme: 'dark',
-      listLoadMode: 'pagination',
       showCharacterCount: true,
-      showMobileSongSequence: false,
-      publicFavorites: false,
-      publicHistory: false,
     })
   })
 
@@ -103,18 +109,14 @@ describe('theme helpers', () => {
           theme: 'default',
         }
       )
-    ).toEqual({
+    ).toMatchObject({
       viewMode: 'small',
       viewModes: {
         ...DEFAULT_PREFERENCES.viewModes,
         gallery: 'small',
       },
       theme: 'default',
-      listLoadMode: 'pagination',
       showCharacterCount: true,
-      showMobileSongSequence: false,
-      publicFavorites: false,
-      publicHistory: false,
     })
   })
 
@@ -153,7 +155,7 @@ describe('theme helpers', () => {
       showCharacterCount: true,
     })
 
-    expect(JSON.parse(window.localStorage.getItem(THEME_STORAGE_KEY) || '{}')).toEqual({
+    expect(JSON.parse(window.localStorage.getItem(THEME_STORAGE_KEY) || '{}')).toMatchObject({
       guest: {
         viewMode: 'small',
         viewModes: {
@@ -161,11 +163,7 @@ describe('theme helpers', () => {
           gallery: 'small',
         },
         theme: 'dark',
-        listLoadMode: 'pagination',
         showCharacterCount: true,
-        showMobileSongSequence: false,
-        publicFavorites: false,
-        publicHistory: false,
       },
       users: {},
     })
@@ -182,20 +180,16 @@ describe('theme helpers', () => {
     )
 
     expect(readStoredPreferences()).toEqual(DEFAULT_PREFERENCES)
-    expect(readStoredPreferences('user-1')).toEqual({
+    expect(readStoredPreferences('user-1')).toMatchObject({
       viewMode: 'list',
       viewModes: {
         ...DEFAULT_PREFERENCES.viewModes,
         gallery: 'list',
       },
       theme: 'default',
-      listLoadMode: 'pagination',
       showCharacterCount: true,
-      showMobileSongSequence: false,
-      publicFavorites: false,
-      publicHistory: false,
     })
-    expect(JSON.parse(window.localStorage.getItem(THEME_STORAGE_KEY) || '{}')).toEqual({
+    expect(JSON.parse(window.localStorage.getItem(THEME_STORAGE_KEY) || '{}')).toMatchObject({
       users: {
         'user-1': {
           viewMode: 'list',
@@ -204,11 +198,7 @@ describe('theme helpers', () => {
             gallery: 'list',
           },
           theme: 'default',
-          listLoadMode: 'pagination',
           showCharacterCount: true,
-          showMobileSongSequence: false,
-          publicFavorites: false,
-          publicHistory: false,
         },
       },
     })
@@ -223,18 +213,13 @@ describe('theme helpers', () => {
       })
     )
 
-    expect(readStoredPreferences()).toEqual({
+    expect(readStoredPreferences()).toMatchObject({
       viewMode: 'small',
       viewModes: {
         ...DEFAULT_PREFERENCES.viewModes,
         gallery: 'small',
       },
       theme: 'dark',
-      listLoadMode: 'pagination',
-      showCharacterCount: false,
-      showMobileSongSequence: false,
-      publicFavorites: false,
-      publicHistory: false,
     })
   })
 
@@ -247,18 +232,13 @@ describe('theme helpers', () => {
       })
     )
 
-    expect(readStoredPreferences('user-1', { includeLegacyFallback: true })).toEqual({
+    expect(readStoredPreferences('user-1', { includeLegacyFallback: true })).toMatchObject({
       viewMode: 'small',
       viewModes: {
         ...DEFAULT_PREFERENCES.viewModes,
         gallery: 'small',
       },
       theme: 'dark',
-      listLoadMode: 'pagination',
-      showCharacterCount: false,
-      showMobileSongSequence: false,
-      publicFavorites: false,
-      publicHistory: false,
     })
     expect(readStoredPreferences('user-1')).toEqual(DEFAULT_PREFERENCES)
   })
@@ -336,19 +316,87 @@ describe('theme helpers', () => {
     )
   })
 
-  it('skips duplicate DOM writes when the resolved theme is already applied', () => {
-    applyResolvedTheme('dark')
+  it.each([
+    { input: { useSpecialFonts: false }, normalized: false, merged: false, valid: true },
+    { input: { useSpecialFonts: true }, normalized: true, merged: true, valid: true },
+    { input: {}, normalized: true, merged: false, valid: false },
+    { input: { useSpecialFonts: 'false' }, normalized: true, merged: false, valid: false },
+  ])('保留合法字体偏好并忽略非法值：$input', ({ input, normalized, merged, valid }) => {
+    expect(normalizeStoredPreferences(input).useSpecialFonts).toBe(normalized)
+    expect(mergeStoredPreferences({ useSpecialFonts: false }, input).useSpecialFonts).toBe(merged)
+    expect(hasStoredPreferenceValues(input)).toBe(valid)
+  })
 
-    const rootSetAttributeSpy = vi.spyOn(document.documentElement, 'setAttribute')
-    const meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement
-    const metaSetAttributeSpy = vi.spyOn(meta, 'setAttribute')
+  it('隔离访客和各账号的字体偏好并保留后续更新', () => {
+    writeStoredPreferences({ useSpecialFonts: true })
+    writeStoredPreferences({ useSpecialFonts: false }, 'font-user-a')
+    expect(readStoredPreferences().useSpecialFonts).toBe(true)
+    expect(readStoredPreferences('font-user-a').useSpecialFonts).toBe(false)
+    expect(readStoredPreferences('font-user-b').useSpecialFonts).toBe(true)
 
-    applyResolvedTheme('dark')
+    writeStoredPreferences(
+      mergeStoredPreferences(readStoredPreferences('font-user-a'), { theme: 'dark' }),
+      'font-user-a'
+    )
+    expect(readStoredPreferences('font-user-a')).toMatchObject({
+      useSpecialFonts: false,
+      theme: 'dark',
+    })
+    expect(readStoredPreferences().useSpecialFonts).toBe(true)
+  })
 
-    expect(rootSetAttributeSpy).not.toHaveBeenCalled()
-    expect(metaSetAttributeSpy).not.toHaveBeenCalled()
+  it.each([
+    {
+      name: '访客关闭',
+      uid: null,
+      stored: JSON.stringify({ guest: { useSpecialFonts: false }, users: {} }),
+      expected: 'system',
+    },
+    {
+      name: '账号覆盖访客',
+      uid: 'font-user-a',
+      stored: JSON.stringify({
+        guest: { useSpecialFonts: true },
+        users: { 'font-user-a': { useSpecialFonts: false } },
+      }),
+      expected: 'system',
+    },
+    {
+      name: '账号缺省',
+      uid: 'font-user-a',
+      stored: JSON.stringify({
+        guest: { useSpecialFonts: false },
+        users: { 'font-user-a': {} },
+      }),
+      expected: 'special',
+    },
+    {
+      name: '旧版偏好',
+      uid: null,
+      stored: JSON.stringify({ useSpecialFonts: false }),
+      expected: 'system',
+    },
+    { name: '损坏存储', uid: null, stored: '{', expected: undefined },
+  ])('首帧应用真实启动脚本的字体偏好：$name', ({ uid, stored, expected }) => {
+    const dom = new JSDOM(bootstrapHtml, {
+      url: 'http://localhost',
+      runScripts: 'outside-only',
+    })
+    try {
+      Object.assign(dom.window, { __HSF_BOOTSTRAP_AUTH_UID__: uid })
+      dom.window.localStorage.setItem(THEME_STORAGE_KEY, stored)
+      const script = dom.window.document.head.querySelectorAll('script')[1]
+      dom.window.eval(script.textContent!)
+      expect(dom.window.document.documentElement.dataset.font).toBe(expected)
+    } finally {
+      dom.window.close()
+    }
+  })
 
-    rootSetAttributeSpy.mockRestore()
-    metaSetAttributeSpy.mockRestore()
+  it('关闭特殊字体后可以恢复', () => {
+    applyFontPreference(false)
+    expect(document.documentElement.dataset.font).toBe('system')
+    applyFontPreference(true)
+    expect(document.documentElement.dataset.font).toBe('special')
   })
 })

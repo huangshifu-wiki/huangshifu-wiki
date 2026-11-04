@@ -22,6 +22,8 @@ export interface UserPreferences {
   viewMode: ViewMode
   viewModes: ViewModePreferences
   theme: ThemeMode
+  /** 控制 Logo 以外的特殊字体。 */
+  useSpecialFonts: boolean
   listLoadMode: ListLoadMode
   showCharacterCount: boolean
   showMobileSongSequence: boolean
@@ -33,6 +35,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   viewMode: 'medium',
   viewModes: DEFAULT_VIEW_MODES,
   theme: 'system',
+  useSpecialFonts: true,
   listLoadMode: 'pagination',
   showCharacterCount: false,
   showMobileSongSequence: false,

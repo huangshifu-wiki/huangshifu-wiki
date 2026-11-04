@@ -293,13 +293,7 @@ const AdminReviewContentPreview = ({ item }: AdminReviewContentPreviewProps) => 
   }
 
   return (
-    <div
-      className="min-h-[calc(100vh-10rem)] bg-[var(--color-bg-antique)] rounded border border-border"
-      style={{
-        fontFamily: "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif",
-        lineHeight: 1.8,
-      }}
-    >
+    <div className="antique-detail min-h-[calc(100vh-10rem)] rounded border border-border">
       <div className="max-w-[1100px] mx-auto px-6 py-8 pb-16 wiki-detail-page">
         {item.reviewType === 'gallery'
           ? renderGalleryPreview(item, handleOpenLightbox)

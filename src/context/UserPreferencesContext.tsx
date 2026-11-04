@@ -10,6 +10,7 @@ import { apiGet, apiPatch } from '../lib/apiClient'
 import { useAuth } from './AuthContext'
 import type { AuthMeResponse } from '../types/api'
 import {
+  applyFontPreference,
   applyResolvedTheme,
   hasStoredPreferenceValues,
   mergeStoredPreferences,
@@ -55,6 +56,7 @@ export const UserPreferencesProvider: React.FC<{ children: React.ReactNode }> = 
       const resolved = resolveThemeMode(nextPreferences.theme)
       setResolvedTheme(resolved)
       applyResolvedTheme(resolved)
+      applyFontPreference(nextPreferences.useSpecialFonts)
     },
     [user?.uid]
   )

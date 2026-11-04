@@ -1981,6 +1981,21 @@ const Settings = () => {
                 </div>
 
                 <SettingRow
+                  label="使用特殊字体"
+                  description="关闭后使用系统字体，Logo 保持原样。"
+                  labelFor="settings-special-fonts-toggle"
+                  control={
+                    <Switch
+                      id="settings-special-fonts-toggle"
+                      checked={preferences.useSpecialFonts}
+                      onCheckedChange={(checked) =>
+                        void updatePreferences({ useSpecialFonts: checked })
+                      }
+                    />
+                  }
+                />
+
+                <SettingRow
                   label="列表加载方式"
                   stackOnMobile
                   control={
