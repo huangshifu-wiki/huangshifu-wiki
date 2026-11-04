@@ -10,7 +10,7 @@
 }
 
 @theme {
-  --font-serif: 'Source Han Serif SC', 'Noto Serif SC', 'Songti SC', 'SimSun', serif;
+  --font-serif: 'Source Han Serif SC', sans-serif;
   --font-body: sans-serif;
   --font-sans: sans-serif;
 
@@ -73,9 +73,7 @@
   --home-shadow-lg: 0 12px 48px rgba(42, 37, 32, 0.08);
   --home-font-display: 'Ma Shan Zheng HSF', 'STKaiti', 'KaiTi', cursive;
   --font-brand-body: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
-  --home-font-body: var(--font-brand-body);
-  --font-antique-body:
-    'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 'FangSong', serif;
+  --home-font-body: 'Noto Serif SC', sans-serif;
   --book-bg-image:
     radial-gradient(ellipse at 12% 4%, rgba(148, 48, 42, 0.055), transparent 34%),
     radial-gradient(ellipse at 88% 10%, rgba(138, 109, 47, 0.08), transparent 38%),
@@ -92,7 +90,7 @@
   --book-panel-shadow: 0 14px 36px rgba(72, 53, 25, 0.08);
   --book-panel-shadow-hover: 0 22px 48px rgba(72, 53, 25, 0.13);
   --book-focus-ring: 0 0 0 3px rgba(176, 123, 23, 0.18);
-  --book-title-font: 'STKaiti', 'KaiTi', var(--home-font-body);
+  --book-title-font: 'STKaiti', sans-serif;
   --ui-overlay-bg: rgba(30, 24, 18, 0.58);
   --ui-floating-shadow: 0 24px 80px rgba(42, 37, 32, 0.28);
   --ui-floating-bg: #fffcf5;
@@ -213,7 +211,6 @@ html[data-font='system'] {
   --font-serif: var(--font-sans);
   --home-font-body: var(--font-sans);
   --book-title-font: var(--font-sans);
-  --font-antique-body: var(--font-sans);
 }
 
 /* Admin button background utilities */
@@ -1425,7 +1422,7 @@ a[href]:not([data-press-feedback='none']),
 .antique-page,
 .antique-detail,
 .mobile-page-shell {
-  font-family: var(--font-antique-body);
+  font-family: var(--home-font-body);
 }
 
 .antique-page,
