@@ -1964,6 +1964,13 @@ const Settings = () => {
                       >
                         查看 API 文档
                       </a>
+                      <a
+                        href="/openapi.json"
+                        download="openapi.json"
+                        className="text-sm text-brand-gold underline underline-offset-4 hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4"
+                      >
+                        下载 OpenAPI 规范
+                      </a>
                     </div>
                   </div>
                 </div>

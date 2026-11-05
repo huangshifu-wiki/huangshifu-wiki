@@ -1,0 +1,15 @@
+extends:
+  - spec
+rules:
+  operation-operationId: error
+  operation-summary: error
+  operation-tag-defined: error
+  no-invalid-media-type-examples:
+    severity: error
+    allowAdditionalProperties: true
+  no-invalid-parameter-examples:
+    severity: error
+    allowAdditionalProperties: true
+  no-invalid-schema-examples:
+    severity: error
+    allowAdditionalProperties: true

@@ -1,12 +1,12 @@
-# 黄诗扶 Wiki API 调用文档
+# 黄诗扶 Wiki Bearer API 调用文档
 
-本文是当前代码版本的 HTTP API 参考。接口可用性受运行时开关、角色、资源归属/可见性、封禁状态和站点服务凭证影响。
+本文是允许 Bearer API 密钥调用的 HTTP API 参考。接口可用性受运行时开关、角色、资源归属/可见性、封禁状态和站点服务凭证影响。
 
 - 所有路径相对于 BASE_URL；BASE_URL 不含末尾斜线。站点域名由部署者提供；本文不假设固定域名。
 - 登录网站后，在「设置 → API 密钥」（/settings/api-keys）创建个人密钥。完整密钥只显示一次；可设 30、90、365 天或永久有效，默认 90 天。
 - 通过交互输入密钥，避免写入命令历史；不要把密钥放进 URL、请求体、脚本仓库或日志。对外访问使用 HTTPS。
 - JSON 写请求设置 Content-Type: application/json。multipart 由 curl 生成 boundary，不要手动写 Content-Type。
-- 本文覆盖 server.ts 中实际挂载的 334 个 HTTP 路由。语义嵌入 API 仅在语义搜索开关启用时注册；共享挂载与管理员动态分支均纳入索引。
+- 本文覆盖 server.ts 实际挂载且允许 API 密钥调用的 330 个方法/路径组合。语义嵌入 API 仅在语义搜索开关启用时注册；共享挂载与管理员动态分支均纳入索引。
 
 ```bash
 BASE_URL='https://站点域名'
@@ -16,28 +16,27 @@ AUTH_HEADER="Authorization: Bearer $API_KEY"
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/users/me"
 ```
 
-## 1. 快速开始与安全使用
+[下载 OpenAPI 3.1 规范](/openapi.json)，可导入支持 OpenAPI 的客户端工具。规范包含逐接口请求、响应、媒体类型与权限条件；不提供在线调试页面。
 
-Cookie-only curl 骨架中的 COOKIE_JAR 与 XSRF_TOKEN 是仍有效的网站网页登录 Cookie/XSRF 值占位符；只能由 Cookie 会话获取，不能把 API_KEY 填入这两个变量。
+## 1. 快速开始与安全使用
 
 Bearer API 密钥调用现有网站 API，不是独立服务，也不产生新权限。密钥请求无需先登录，不需 Cookie/XSRF；显式 Authorization 优先于 Cookie，密钥无效时不会回退到 Cookie。服务端每次请求按账户当前状态判权，因此角色调整、封禁、撤销、到期会影响后续请求。
 
 管理员密钥仍受每条 API 的具体权限约束；不能越过所有权、可见性、额外当前密码校验或功能开关。多个密钥共用账号/IP 限流，不产生独立配额。写请求没有通用幂等键，网络断开后先核对状态再决定是否重试。
 
-API 密钥不能创建/列出/撤销密钥，不能获取或退出网页登录会话。密钥调用登录、微信登录、登出会话端点返回 403 API_KEY_SESSION_FORBIDDEN；密钥管理接口仅 Cookie 会话可用，Bearer 调用返回 403 COOKIE_SESSION_REQUIRED。改/重置密码、退出网页登录不会撤销 API 密钥；账户注销与管理员删除用户会撤销，恢复用户不会恢复旧密钥。
+网页登录会话和 API 密钥管理请通过网站完成。改/重置密码、退出网页登录不会撤销 API 密钥；账户注销与管理员删除用户会撤销，恢复用户不会恢复旧密钥。
 
 ## 2. 认证、权限及通用约定
 
-| 标记        | 约束                                                                             |
-| ----------- | -------------------------------------------------------------------------------- |
-| 公开        | 无需登录；可选身份仍会影响私有内容可见性。                                       |
-| 已认证      | 有效 Cookie 会话或有效 Bearer 密钥；如处理器声明未封禁检查，封禁用户仍不能操作。 |
-| 管理员      | admin 或 super_admin，且仍受资源规则约束。                                       |
-| 超级管理员  | 仅 super_admin，用于敏感管理操作。                                               |
-| Cookie-only | 有效网页登录 Cookie 与 CSRF；API 密钥不适用。                                    |
-| 条件服务    | 需要站点开关、Amap、SMTP、S3、向量库或外部音乐服务可用。                         |
+| 标记       | 约束                                                               |
+| ---------- | ------------------------------------------------------------------ |
+| 公开       | 无需登录；可选身份仍会影响私有内容可见性。                         |
+| 已认证     | 有效 Bearer API 密钥；如处理器声明未封禁检查，封禁用户仍不能操作。 |
+| 管理员     | admin 或 super_admin，且仍受资源规则约束。                         |
+| 超级管理员 | 仅 super_admin，用于敏感管理操作。                                 |
+| 条件服务   | 需要站点开关、Amap、SMTP、S3、向量库或外部音乐服务可用。           |
 
-Express JSON 请求体上限 1 MiB；一般请求超时 30 秒，备份等长任务另有设置。普通页码列表使用顶层 total、page、limit、totalPages、hasMore 元数据，具体数组字段因接口而异；游标批处理保留 nextCursor/hasMore，不分页接口不含分页元数据。日期时间通常是 ISO 8601，日期字段通常是 YYYY-MM-DD；具体以逐接口响应字段为准。
+Express JSON 请求体上限 1 MiB；一般请求超时 30 秒，备份等长任务另有设置。普通页码列表使用顶层 total、page、limit、totalPages、hasMore 元数据，具体数组字段因接口而异；游标批处理保留 nextCursor/hasMore，不分页接口不含分页元数据。OpenAPI 对同一 URL 位置的多方法参数统一使用 identifier；各方法分别注明它代表公开 slug 还是内部 id/docId，不能混用。Markdown 标题保留实际 Express 参数名。日期时间通常是 ISO 8601，日期字段通常是 YYYY-MM-DD；具体以逐接口响应字段为准。
 
 ### ID 对照
 
@@ -54,104 +53,98 @@ Express JSON 请求体上限 1 MiB；一般请求超时 30 秒，备份等长任
 
 接口包装不是统一的 {data}。以下共享模型列出 transformer 实际可公开字段；某个接口若省略字段、返回 null 或增加计数/交互状态，会在该接口正文说明。
 
-| 模型            | 字段与嵌套                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| User            | uid、publicId、email、displayName、photoURL、photoAssetId、role、status、banReason、bannedAt、emailVerified、emailVerifiedAt、level、signature、bio、isDeleted、deletedAt、deletedBy、createdAt、updatedAt。具体 handler 可能返回子集；不含密码 hash。                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Post            | id、slug、title、section、musicDocId、albumDocId、content、mentionTargets[{uid,publicId?,displayName,photoURL?}]、tags、locationCode、locationName、locationDetail、authorUid、authorPublicId、authorName、status、reviewNote、reviewedBy、reviewedAt、hotScore、viewCount、likesCount、dislikesCount、commentsCount、isPinned、isDeleted、deletedAt、deletedBy、createdAt、updatedAt。列表通常无正文；详情额外 comments/likedByMe/favoritedByMe/dislikedByMe。                                                                                                                                                                                                                                               |
-| Wiki page       | id、slug、title、category、content、tags、relations[{type,targetSlug,label?,bidirectional}]、eventDate、locationCode、locationName、locationDetail、status、reviewNote、reviewedBy、reviewedAt、viewCount、favoritesCount、isPinned、likesCount、dislikesCount、isDeleted、deletedAt、deletedBy、lastEditorUid、lastEditorName、createdAt、updatedAt。relation type 是 related_person/work_relation/timeline_relation/custom；最多80项、label最多60，默认 bidirectional=true。                                                                                                                                                                                                                                |
-| Comment         | id、postId、galleryId、authorUid、authorPublicId、authorName、authorPhoto、content、mentionTargets[{uid,publicId?,displayName,photoURL?}]、parentId、replyToId、replyToAuthorUid、replyToAuthorName、isDeleted、deletedAt、deletedBy、deletedByName、likesCount、likedByMe、createdAt。删除内容在某些用户列表会用“评论已删除”遮蔽；deleted root 有存活 reply 时可能作为占位保留。                                                                                                                                                                                                                                                                                                                             |
-| Gallery         | id、slug、title、description、authorUid、authorPublicId、authorName、tags、relatedLinks[{label,url}]、eventDate、locationCode/locationName/locationDetail、copyright、status、reviewNote、reviewedBy、reviewedAt、published/publishedAt、likesCount、dislikesCount、favoritesCount、likedByMe/dislikedByMe/favoritedByMe、isDeleted/deletedAt/deletedBy、createdAt/updatedAt、images。                                                                                                                                                                                                                                                                                                                        |
-| Gallery image   | id、assetId、url、originalUrl、thumbnailUrl、thumbnailStatus、name、mimeType、sizeBytes。url 可能是空字符串；assetId 取上传响应 asset.id。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Song            | docId、slug、title、artists、lyricists、composers、arrangers、vocals、album、tags、cover、coverThumbnail、audioUrl、lyric、lyricType、lyricPlain、lyricSource、description、releaseDate、durationMs、sources[{id,resourceType,platform,sourceId,sourceUrl,isPrimary,createdAt,updatedAt}]、playable、playableOverride、customPlatformLinks[{label,url}]、displayAlbumMode、displayAlbum、manualAlbumName、coverId、coverAlbumDocId、covers[{id,url,thumbnailUrl,isDefault,sortOrder}]、linkedAlbums[{albumDocId,albumId,albumSlug,title,artist,discNumber,trackOrder,isDisplay}]、isInstrumental、favoritedByMe、isDeleted/deletedAt/deletedBy、createdAt/updatedAt。歌曲列表通常故意省略 lyric/description。 |
-| Album           | docId、slug、title、artist、cover、coverThumbnail、description、sources、releaseDate、tracks、coverId、isDeleted/deletedAt/deletedBy、covers[{id,url,thumbnailUrl,isDefault,sortOrder}]、songs[{songDocId,discNumber,trackOrder,isDisplay,song:{docId,slug,title,artists,cover,coverThumbnail}}]、createdAt/updatedAt。详情另外返回 id、规范化 discs 与完整 track DTO。                                                                                                                                                                                                                                                                                                                                       |
-| Ticket listing  | id、slug、type、eventId、customEventName、eventName、eventSlug、eventLocation、quantity、ticketTier、seat、authorUid、authorPublicId、authorName、createdAt/updatedAt；详情增加 description/contact。作者/管理员私有视图还含 status、reviewNote、reviewedAt、isDeleted、deletedAt、deletedBy、deletionReason。列表普通响应不含联系资料。                                                                                                                                                                                                                                                                                                                                                                      |
-| Event           | id、slug、title、location、content、timeSlots、timeStatus、ticketPrices、saleTimes、lineup、tags、externalLinks、relatedLinks、sortStart/sortEnd、封面 asset/url/name/thumbnail/status、createdByUid/Name、updatedByUid/Name、isDeleted/deletedAt/deletedBy、createdAt/updatedAt、posters[{id,assetId,url,originalUrl,thumbnailUrl,thumbnailStatus,name}]。                                                                                                                                                                                                                                                                                                                                                   |
-| Upload session  | id、ownerUid、status、maxFiles、uploadedFiles、expiresAt、createdAt、updatedAt。上传响应 asset 含 id、imageMapId、publicUrl、storageKey、fileName、mimeType、sizeBytes、md5、status、reused；storageErrors 另列。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Notification    | id、userUid、type、payload、isRead、createdAt。payload 按通知 type 变化，不构成固定统一子模型。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Wiki branch     | id、pageSlug、editorUid、editorName、status、latestRevisionId、createdAt/updatedAt、page{slug,title,category}\|null。WikiRevision 含 id、pageSlug、branchId、title、content、slug、category、editorUid/Name、tags、relations、eventDate、isAutoSave、createdAt。PR 含 id、branchId、pageSlug、title/description/status、createdByUid/Name、reviewedBy/At、mergedAt、baseRevisionId、conflictData、branch/page、comments[{id,prId,authorUid,authorName,content,createdAt}]。                                                                                                                                                                                                                                   |
-| Region          | code、name、fullName、level、levelName、parentCode。坐标解析结果另含 coordinate{lng,lat}、province/provinceCode、city/cityCode、district/districtCode、adcode、formattedAddress。地址搜索项含 name/address/coordinate/adcode。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| EXIF GPS        | ImageGpsResult 为 {url,gps:{latitude,longitude}\|null,error?}；批量响应另含 hasGps、mostFrequentGps、regionSuggestion。服务器会按 URL 抓取图片，调用方只应提交可信 URL。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ImageMap        | id、md5、localUrl、externalUrl、s3Url、thumbnailUrl、storageType（推断）、blurhash、thumbhash、isDeleted/deletedAt/deletedBy、createdAt。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| SearchPage      | items、total、page、limit、totalPages、hasMore；整体搜索按 wiki/posts/galleries/music/albums/lyrics 分页。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Favorite        | favorites[] 每项 id/targetType/targetId/createdAt/target；target 依类型为 Wiki/Post/Song/Gallery DTO；不可见目标会过滤。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| EditLock        | id、collection、recordId、userId、username、createdAt、expiresAt。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Admin dashboard | success、data{stats,reviewQueue,system,trends}、timestamp；system 子系统各为 {data:...}\|{error}。trends 含 dates 与 posts/galleries/wiki/users 数组和 totals。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| 模型            | 字段与嵌套                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| User            | uid、publicId、email、displayName、photoURL、photoAssetId、role、status、banReason、bannedAt、emailVerified、emailVerifiedAt、level、signature、bio、isDeleted、deletedAt、deletedBy、createdAt、updatedAt。具体 handler 可能返回子集；不含密码 hash。                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Post            | id、slug、title、section、musicDocId、albumDocId、content、mentionTargets[{uid,publicId?,displayName,photoURL?}]、tags、locationCode、locationName、locationDetail、authorUid、authorPublicId、authorName、status、reviewNote、reviewedBy、reviewedAt、hotScore、viewCount、likesCount、dislikesCount、commentsCount、isPinned、isDeleted、deletedAt、deletedBy、createdAt、updatedAt。列表通常无正文；详情额外 comments/likedByMe/favoritedByMe/dislikedByMe。                                                                                                                                                                                                                |
+| Wiki page       | id、slug、title、category、content、tags、relations[{type,targetSlug,label?,bidirectional}]、eventDate、locationCode、locationName、locationDetail、status、reviewNote、reviewedBy、reviewedAt、viewCount、favoritesCount、isPinned、likesCount、dislikesCount、isDeleted、deletedAt、deletedBy、lastEditorUid、lastEditorName、createdAt、updatedAt。relation type 是 related_person/work_relation/timeline_relation/custom；最多80项、label最多60，默认 bidirectional=true。                                                                                                                                                                                                 |
+| Comment         | id、postId、galleryId、authorUid、authorPublicId、authorName、authorPhoto、content、mentionTargets[{uid,publicId?,displayName,photoURL?}]、parentId、replyToId、replyToAuthorUid、replyToAuthorName、isDeleted、deletedAt、deletedBy、deletedByName、likesCount、likedByMe、createdAt。删除内容在某些用户列表会用“评论已删除”遮蔽；deleted root 有存活 reply 时可能作为占位保留。                                                                                                                                                                                                                                                                                              |
+| Gallery         | id、slug、title、description、authorUid、authorPublicId、authorName、tags、relatedLinks[{label,url}]、eventDate、locationCode/locationName/locationDetail、copyright、status、reviewNote、reviewedBy、reviewedAt、published/publishedAt、likesCount、dislikesCount、favoritesCount、likedByMe/dislikedByMe/favoritedByMe、isDeleted/deletedAt/deletedBy、createdAt/updatedAt、images。                                                                                                                                                                                                                                                                                         |
+| Gallery image   | id、assetId、url、originalUrl、thumbnailUrl、thumbnailStatus、name、mimeType、sizeBytes。url 可能是空字符串；assetId 取上传响应 asset.id。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Song            | docId、slug、title、artists、lyricists、composers、arrangers、vocals、album、tags、cover、coverThumbnail、audioUrl、lyric、lyricType、lyricPlain、lyricSource、description、releaseDate、durationMs、sources[{id,resourceType,platform,sourceId,sourceUrl,isPrimary,createdAt,updatedAt}]、playable、playableOverride、customPlatformLinks[{label,url}]、displayAlbumMode、displayAlbum、manualAlbumName、coverId、coverAlbumDocId、covers[{id,url,thumbnailUrl,isDefault,sortOrder}]、linkedAlbums[{albumDocId,albumId,albumSlug,title,artist,discNumber,trackOrder,isDisplay}]、isInstrumental、favoritedByMe、createdAt/updatedAt。歌曲列表通常故意省略 lyric/description。 |
+| Album           | docId、slug、title、artist、cover、coverThumbnail、description、sources、releaseDate、tracks、coverId、isDeleted/deletedAt/deletedBy、covers[{id,url,thumbnailUrl,isDefault,sortOrder}]、songs[{songDocId,discNumber,trackOrder,isDisplay,song:{docId,slug,title,artists,cover,coverThumbnail}}]、createdAt/updatedAt。详情另外返回 id、规范化 discs 与完整 track DTO。                                                                                                                                                                                                                                                                                                        |
+| Ticket listing  | id、slug、type、eventId、customEventName、eventName、eventSlug、eventLocation、quantity、ticketTier、seat、authorUid、authorPublicId、authorName、createdAt/updatedAt；详情增加 description/contact。作者/管理员私有视图还含 status、reviewNote、reviewedAt、isDeleted、deletedAt、deletedBy、deletionReason。列表普通响应不含联系资料。                                                                                                                                                                                                                                                                                                                                       |
+| Event           | id、slug、title、location、content、timeSlots、timeStatus、ticketPrices、saleTimes、lineup、tags、externalLinks、relatedLinks、sortStart/sortEnd、封面 asset/url/name/thumbnail/status、createdByUid/Name、updatedByUid/Name、isDeleted/deletedAt/deletedBy、createdAt/updatedAt、posters[{id,assetId,url,originalUrl,thumbnailUrl,thumbnailStatus,name}]。                                                                                                                                                                                                                                                                                                                    |
+| Upload session  | id、ownerUid、status、maxFiles、uploadedFiles、expiresAt、createdAt、updatedAt。上传响应 asset 含 id、imageMapId、publicUrl、storageKey、fileName、mimeType、sizeBytes、md5、status、reused；storageErrors 另列。                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Notification    | id、userUid、type、payload、isRead、createdAt。payload 按通知 type 变化，不构成固定统一子模型。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Wiki branch     | id、pageSlug、editorUid、editorName、status、latestRevisionId、createdAt/updatedAt、page{slug,title,category}\|null。WikiRevision 含 id、pageSlug、branchId、title、content、slug、category、editorUid/Name、tags、relations、eventDate、isAutoSave、createdAt。PR 含 id、branchId、pageSlug、title/description/status、createdByUid/Name、reviewedBy/At、mergedAt、baseRevisionId、conflictData、branch/page、comments[{id,prId,authorUid,authorName,content,createdAt}]。                                                                                                                                                                                                    |
+| Region          | code、name、fullName、level、levelName、parentCode。坐标解析结果另含 coordinate{lng,lat}、province/provinceCode、city/cityCode、district/districtCode、adcode、formattedAddress。地址搜索项含 name/address/coordinate/adcode。                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| EXIF GPS        | ImageGpsResult 为 {url,gps:{latitude,longitude}\|null,error?}；批量响应另含 hasGps、mostFrequentGps、regionSuggestion。服务器会按 URL 抓取图片，调用方只应提交可信 URL。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ImageMap        | id、md5、localUrl、externalUrl、s3Url、thumbnailUrl、storageType（推断）、blurhash、thumbhash、isDeleted/deletedAt/deletedBy、createdAt。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| SearchPage      | items、total、page、limit、totalPages、hasMore；整体搜索按 wiki/posts/galleries/music/albums/lyrics 分页。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Favorite        | favorites[] 每项 id/targetType/targetId/createdAt/target；target 依类型为 Wiki/Post/Song/Gallery DTO；不可见目标会过滤。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| EditLock        | id、collection、recordId、userId、username、createdAt、expiresAt。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Admin dashboard | success、data{stats,reviewQueue,system,trends}、timestamp；system 子系统各为 {data:...}\|{error}。trends 含 dates 与 posts/galleries/wiki/users 数组和 totals。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 
 ### 常见请求 schema
 
 下列 schema 由对应路由 validateBody 直接执行；未列字段会按 Zod object 默认策略处理，不要依赖传入未知字段。
 
-| Schema / 路由                                                                            | 字段、类型、必填/默认与范围                                                                                                                                                                                                          |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| registerSchema                                                                           | email 必填有效邮箱；password 必填 8–128 字符；displayName 可省略/空白视为缺省，最多50字符。                                                                                                                                          |
-| loginSchema                                                                              | email 必填有效邮箱；password 必填非空字符串。                                                                                                                                                                                        |
-| verifyEmailSchema                                                                        | token 必填非空字符串。重置确认 body 为 token 与 newPassword，newPassword 8–128 字符。                                                                                                                                                |
-| setupInitializeSchema                                                                    | email、displayName、password 必填；displayName trim、非空、最多50；password 8–128。仅空用户表使用。                                                                                                                                  |
-| createApiKeySchema                                                                       | name 必填，trim 后 1–100 字符；expiry 为 30d/90d/365d/never，默认90d。                                                                                                                                                               |
-| userEmailUpdateSchema                                                                    | currentPassword 非空必填；newEmail trim 后必填有效邮箱。                                                                                                                                                                             |
-| postCreateSchema / postUpdateSchema                                                      | title、section、content 都必填且非空；上限分别200、80、500 KiB；tags 最多30项/单项50；status=draft\|pending\|published；musicDocId/albumDocId 可选；locationCode/locationDetail 可 null。POST 与 PUT 共用 schema，PUT 仍全量提交。   |
-| postDeleteSchema                                                                         | reason 可选（最多1000），schema 缺省对象允许空 body；删除他人仍由 handler 要求 reason。                                                                                                                                              |
-| postCommentSchema                                                                        | content trim 后非空、最多5000；parentId 可 null/省略，字符串最多191。                                                                                                                                                                |
-| wikiCreateSchema / wikiUpdateSchema                                                      | title/content 非空，上限200/500 KiB；category最多80；tags最多30/每项50；relations最多80条；eventDate最多32；地点字段有长度限额。Create 要 title/content/category，Update schema partial 但 handler仍强制 title/content/category。    |
-| wikiRevisionSchema                                                                       | title/content/category 非空；tags/relations与 Wiki schema 同限制；eventDate 可 null；isAutoSave 为 boolean 可选。                                                                                                                    |
-| ticketListingWriteSchema                                                                 | strict object；type=offer\|request；quantity整数1–10000；ticketTier必填最多100；seat最多200/默认空；description最多500 KiB/默认空；contact必填最多100 KiB；eventId 与 customEventName 必须二选一；status=draft\|pending\|published。 |
-| eventWriteSchema                                                                         | title必填最多200；location最多200默认空；content最多500 KiB默认空；timeSlots、ticketPrices、saleTimes最多30项；lineup最多50项/单项100；tags最多30项/单项50；links最多20项/label最多80；coverAssetId/uploadSessionId/posters可选。    |
-| galleryDeleteSchema                                                                      | reason 可选，最多1000；图库管理接口另有本人/管理员判断。                                                                                                                                                                             |
-| adminBatchGalleryImagesSchema / adminBatchSongCoversSchema / adminBatchAlbumCoversSchema | 对应 imageIds/coverIds 数组必填 1–200；每项 trim 后非空，重复项去重。                                                                                                                                                                |
-| adminAlbumTrackReorderSchema                                                             | tracks最多20项；每碟 disc 为 1–20 唯一整数、name trim 后非空最多120、songs最多5000；歌曲 songDocId 非空最多191，trackOrder整数0–5000；歌曲不能跨位置重复。路由另外要求完整包含当前关系集合。                                         |
-| backupRestoreSchema                                                                      | confirm 必须为 true，解密 password 可选最多128字符；上传恢复还要 multipart file。                                                                                                                                                    |
+| Schema / 路由                                                                            | 字段、类型、必填/默认与范围                                                                                                                                                                                                                     |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| registerSchema                                                                           | email 必填有效邮箱；password 必填 8–128 字符；displayName 可省略/空白视为缺省，最多50字符。                                                                                                                                                     |
+| verifyEmailSchema                                                                        | token 必填非空字符串。重置确认 body 为 token 与 newPassword，newPassword 8–128 字符。                                                                                                                                                           |
+| setupInitializeSchema                                                                    | email、displayName、password 必填；displayName trim、非空、最多50；password 8–128。仅空用户表使用。                                                                                                                                             |
+| userEmailUpdateSchema                                                                    | currentPassword 非空必填；newEmail trim 后必填有效邮箱。                                                                                                                                                                                        |
+| postCreateSchema / postUpdateSchema                                                      | title、section、content 都必填且非空；上限分别200、80、500 KiB；tags 最多30项/单项50；status=draft\|pending\|published；musicDocId/albumDocId 可选；locationCode/locationDetail 可 null。POST 与 PUT 共用 schema，PUT 仍全量提交。              |
+| postDeleteSchema                                                                         | reason 可选（最多1000），schema 缺省对象允许空 body；删除他人仍由 handler 要求 reason。                                                                                                                                                         |
+| postCommentSchema                                                                        | content trim 后非空、最多5000；parentId 可 null/省略，字符串最多191。                                                                                                                                                                           |
+| wikiCreateSchema / wikiUpdateSchema                                                      | title/content 非空，上限200/500 KiB；category最多80；tags最多30/每项50；relations最多80条；eventDate最多32；地点字段有长度限额。Create 要 title/content/category，Update schema partial 但 handler仍强制 title/content/category。               |
+| wikiRevisionSchema                                                                       | title/content/category 非空；tags/relations与 Wiki schema 同限制；eventDate 可 null；isAutoSave 为 boolean 可选。                                                                                                                               |
+| ticketListingWriteSchema                                                                 | strict object；type=offer\|request；quantity整数1–10000；ticketTier必填最多100；seat最多200/默认空；description最多500 KiB/默认空；contact必填最多100 KiB；eventId 与 customEventName 必须二选一；status=draft\|pending\|published。            |
+| eventWriteSchema                                                                         | title必填最多200；location最多200默认空；content最多500 KiB默认空；timeSlots、ticketPrices、saleTimes最多30项；lineup最多50项/单项100；tags最多30项/单项50；links最多20项/label最多80；coverAssetId/uploadSessionId/posters可选。               |
+| galleryDeleteSchema                                                                      | reason 可选，最多1000；图库管理接口另有本人/管理员判断。                                                                                                                                                                                        |
+| adminBatchGalleryImagesSchema / adminBatchSongCoversSchema / adminBatchAlbumCoversSchema | 对应 imageIds/coverIds 数组必填 1–200；每项 trim 后非空，重复项去重。                                                                                                                                                                           |
+| adminAlbumTrackReorderSchema                                                             | updatedAt 必填 ISO 8601 时间，取当前专辑响应；tracks最多20项；每碟 disc 为 1–20 唯一整数、name trim 后非空最多120、songs最多5000；歌曲 songDocId 非空最多191，trackOrder整数0–5000；歌曲不能跨位置重复。快照替换现有曲目关系，版本冲突返回409。 |
+| backupRestoreSchema                                                                      | confirm 必须为 true，解密 password 可选最多128字符；上传恢复还要 multipart file。                                                                                                                                                               |
 
 parseInteger 仅在对应路由显式调用时生效；数值输入会被转整数/夹紧或回退默认，不能把这些规则推广给所有 API。详细服务手工解析字段列在各 domain 条目。
 
-常见分页 helper parsePagination：page 默认1、最小1；limit 默认20、限制到1–100；offset=(page-1)\*limit。明确使用自定义 parseInteger 的接口覆盖此默认值；生成的逐接口参数行会注明可静态识别的字段、schema 名及处理器解析规则。
+常见分页 helper parsePagination：page 默认1、最小1；limit 默认20、限制到1–100；offset=(page-1)\*limit。明确使用自定义 parseInteger 的接口覆盖此默认值；逐接口参数与 OpenAPI 规范注明实际字段及处理器解析规则。
 
 ## 3. 接口索引
 
-目录和逐接口正文由 AST 注册清单生成：334 个已挂载方法/路径模板，13 个语义向量接口为条件注册。冒号参数是必需 path segment，星号表示通配对象键；REPLACE\_ 占位 ID 必须从前序响应读取。
+目录和逐接口正文覆盖 330 个允许 API 密钥调用的方法/路径模板，13 个语义向量接口为条件注册。冒号参数是必需 path segment，星号表示通配对象键。
+
+逐接口条目列出参数、成功响应及失败状态摘要，完整嵌套结构和媒体类型分支见对应 OpenAPI operationId；所有权、可见性、软删除和副作用见各章业务说明。curl 是传输格式模板：将 REPLACE\_ 占位符替换为真实值，资源 ID 和版本时间从前序响应读取；破坏性操作只在隔离环境执行。
 
 #### 4. 用户资料与账号
 
-| 接口                                                                               | 用途                                           | 权限/条件          |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------ |
-| [GET /api/auth/health](#api-get-api-auth-health)                                   | 读取 auth / health                             | 公开/可选身份      |
-| [GET /api/auth/me](#api-get-api-auth-me)                                           | 读取 auth / me                                 | 公开/可选身份      |
-| [POST /api/auth/register](#api-post-api-auth-register)                             | 创建/提交/触发 auth / register                 | 公开/可选身份      |
-| [POST /api/auth/verify-email](#api-post-api-auth-verify-email)                     | 创建/提交/触发 auth / verify email             | 公开/可选身份      |
-| [POST /api/auth/resend-verification](#api-post-api-auth-resend-verification)       | 创建/提交/触发 auth / resend verification      | 公开/可选身份      |
-| [POST /api/auth/password-reset/request](#api-post-api-auth-password-reset-request) | 创建/提交/触发 auth / password reset / request | 公开/可选身份      |
-| [POST /api/auth/password-reset/confirm](#api-post-api-auth-password-reset-confirm) | 创建/提交/触发 auth / password reset / confirm | 公开/可选身份      |
-| [POST /api/auth/login](#api-post-api-auth-login)                                   | 创建/提交/触发 auth / login                    | 公开/可选身份      |
-| [POST /api/auth/wechat/login](#api-post-api-auth-wechat-login)                     | 创建/提交/触发 auth / wechat / login           | 公开/可选身份      |
-| [POST /api/auth/logout](#api-post-api-auth-logout)                                 | 创建/提交/触发 auth / logout                   | 公开/可选身份      |
-| [GET /api/users/me/api-keys](#api-get-api-users-me-api-keys)                       | 读取 users / me / api keys                     | Cookie 会话 + CSRF |
-| [POST /api/users/me/api-keys](#api-post-api-users-me-api-keys)                     | 创建/提交/触发 users / me / api keys           | Cookie 会话 + CSRF |
-| [DELETE /api/users/me/api-keys/:id](#api-delete-api-users-me-api-keys-id)          | 删除/移除 users / me / api keys                | Cookie 会话 + CSRF |
-| [GET /api/users/status](#api-get-api-users-status)                                 | 读取 users / status                            | 已认证             |
-| [PUT /api/users/:userId/status](#api-put-api-users-userid-status)                  | 更新/执行 users / status                       | 超级管理员         |
-| [PUT /api/users/name](#api-put-api-users-name)                                     | 更新/执行 users / name                         | 已认证且未封禁     |
-| [PUT /api/users/email](#api-put-api-users-email)                                   | 更新/执行 users / email                        | 已认证且未封禁     |
-| [PUT /api/users/phone](#api-put-api-users-phone)                                   | 更新/执行 users / phone                        | 已认证且未封禁     |
-| [PUT /api/users/password](#api-put-api-users-password)                             | 更新/执行 users / password                     | 已认证且未封禁     |
-| [GET /api/users/me](#api-get-api-users-me)                                         | 读取 users / me                                | 已认证且未封禁     |
-| [PATCH /api/users/me](#api-patch-api-users-me)                                     | 部分更新 users / me                            | 已认证且未封禁     |
-| [DELETE /api/users/account](#api-delete-api-users-account)                         | 删除/移除 users / account                      | 已认证且未封禁     |
-| [GET /api/users](#api-get-api-users)                                               | 读取 users                                     | 管理员             |
-| [PATCH /api/users/:userId/role](#api-patch-api-users-userid-role)                  | 部分更新 users / role                          | 超级管理员         |
-| [PUT /api/users/:userId/role](#api-put-api-users-userid-role)                      | 更新/执行 users / role                         | 超级管理员         |
-| [PATCH /api/users/:userId](#api-patch-api-users-userid)                            | 部分更新 users                                 | 管理员             |
-| [PUT /api/users/:userId/reset-password](#api-put-api-users-userid-reset-password)  | 更新/执行 users / reset password               | 管理员             |
-| [PUT /api/users/:userId/ban](#api-put-api-users-userid-ban)                        | 更新/执行 users / ban                          | 管理员             |
-| [PUT /api/users/:userId/unban](#api-put-api-users-userid-unban)                    | 更新/执行 users / unban                        | 管理员             |
-| [GET /api/users/me/history](#api-get-api-users-me-history)                         | 读取 users / me / history                      | 已认证且未封禁     |
-| [GET /api/users/mentions](#api-get-api-users-mentions)                             | 读取 users / mentions                          | 已认证且未封禁     |
-| [GET /api/users/:userId/profile](#api-get-api-users-userid-profile)                | 读取 users / profile                           | 公开/可选身份      |
-| [GET /api/users/:userId/posts](#api-get-api-users-userid-posts)                    | 读取 users / posts                             | 公开/可选身份      |
-| [GET /api/users/:userId/galleries](#api-get-api-users-userid-galleries)            | 读取 users / galleries                         | 公开/可选身份      |
-| [GET /api/users/:userId/wiki](#api-get-api-users-userid-wiki)                      | 读取 users / wiki                              | 公开/可选身份      |
-| [GET /api/users/:userId/comments](#api-get-api-users-userid-comments)              | 读取 users / comments                          | 公开/可选身份      |
-| [GET /api/users/:userId/favorites](#api-get-api-users-userid-favorites)            | 读取 users / favorites                         | 公开/可选身份      |
-| [GET /api/users/:userId/history](#api-get-api-users-userid-history)                | 读取 users / history                           | 公开/可选身份      |
-| [GET /api/users/:userId/likes](#api-get-api-users-userid-likes)                    | 读取 users / likes                             | 已认证             |
+| 接口                                                                               | 用途                                           | 权限/条件      |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------- | -------------- |
+| [GET /api/auth/health](#api-get-api-auth-health)                                   | 读取 auth / health                             | 公开/可选身份  |
+| [GET /api/auth/me](#api-get-api-auth-me)                                           | 读取 auth / me                                 | 公开/可选身份  |
+| [POST /api/auth/register](#api-post-api-auth-register)                             | 创建/提交/触发 auth / register                 | 公开/可选身份  |
+| [POST /api/auth/verify-email](#api-post-api-auth-verify-email)                     | 创建/提交/触发 auth / verify email             | 公开/可选身份  |
+| [POST /api/auth/resend-verification](#api-post-api-auth-resend-verification)       | 创建/提交/触发 auth / resend verification      | 公开/可选身份  |
+| [POST /api/auth/password-reset/request](#api-post-api-auth-password-reset-request) | 创建/提交/触发 auth / password reset / request | 公开/可选身份  |
+| [POST /api/auth/password-reset/confirm](#api-post-api-auth-password-reset-confirm) | 创建/提交/触发 auth / password reset / confirm | 公开/可选身份  |
+| [GET /api/users/status](#api-get-api-users-status)                                 | 读取 users / status                            | 已认证         |
+| [PUT /api/users/:userId/status](#api-put-api-users-userid-status)                  | 更新/执行 users / status                       | 超级管理员     |
+| [PUT /api/users/name](#api-put-api-users-name)                                     | 更新/执行 users / name                         | 已认证且未封禁 |
+| [PUT /api/users/email](#api-put-api-users-email)                                   | 更新/执行 users / email                        | 已认证且未封禁 |
+| [PUT /api/users/phone](#api-put-api-users-phone)                                   | 更新/执行 users / phone                        | 已认证且未封禁 |
+| [PUT /api/users/password](#api-put-api-users-password)                             | 更新/执行 users / password                     | 已认证且未封禁 |
+| [GET /api/users/me](#api-get-api-users-me)                                         | 读取 users / me                                | 已认证且未封禁 |
+| [PATCH /api/users/me](#api-patch-api-users-me)                                     | 部分更新 users / me                            | 已认证且未封禁 |
+| [DELETE /api/users/account](#api-delete-api-users-account)                         | 删除/移除 users / account                      | 已认证且未封禁 |
+| [GET /api/users](#api-get-api-users)                                               | 读取 users                                     | 管理员         |
+| [PATCH /api/users/:userId/role](#api-patch-api-users-userid-role)                  | 部分更新 users / role                          | 超级管理员     |
+| [PUT /api/users/:userId/role](#api-put-api-users-userid-role)                      | 更新/执行 users / role                         | 超级管理员     |
+| [PATCH /api/users/:userId](#api-patch-api-users-userid)                            | 部分更新 users                                 | 管理员         |
+| [PUT /api/users/:userId/reset-password](#api-put-api-users-userid-reset-password)  | 更新/执行 users / reset password               | 管理员         |
+| [PUT /api/users/:userId/ban](#api-put-api-users-userid-ban)                        | 更新/执行 users / ban                          | 管理员         |
+| [PUT /api/users/:userId/unban](#api-put-api-users-userid-unban)                    | 更新/执行 users / unban                        | 管理员         |
+| [GET /api/users/me/history](#api-get-api-users-me-history)                         | 读取 users / me / history                      | 已认证且未封禁 |
+| [GET /api/users/mentions](#api-get-api-users-mentions)                             | 读取 users / mentions                          | 已认证且未封禁 |
+| [GET /api/users/:userId/profile](#api-get-api-users-userid-profile)                | 读取 users / profile                           | 公开/可选身份  |
+| [GET /api/users/:userId/posts](#api-get-api-users-userid-posts)                    | 读取 users / posts                             | 公开/可选身份  |
+| [GET /api/users/:userId/galleries](#api-get-api-users-userid-galleries)            | 读取 users / galleries                         | 公开/可选身份  |
+| [GET /api/users/:userId/wiki](#api-get-api-users-userid-wiki)                      | 读取 users / wiki                              | 公开/可选身份  |
+| [GET /api/users/:userId/comments](#api-get-api-users-userid-comments)              | 读取 users / comments                          | 公开/可选身份  |
+| [GET /api/users/:userId/favorites](#api-get-api-users-userid-favorites)            | 读取 users / favorites                         | 公开/可选身份  |
+| [GET /api/users/:userId/history](#api-get-api-users-userid-history)                | 读取 users / history                           | 公开/可选身份  |
+| [GET /api/users/:userId/likes](#api-get-api-users-userid-likes)                    | 读取 users / likes                             | 已认证         |
 
 #### 5. 帖子与版块
 
@@ -296,6 +289,7 @@ parseInteger 仅在对应路由显式调用时生效；数值输入会被转整�
 | 接口                                                                                                   | 用途                                          | 权限/条件     |
 | ------------------------------------------------------------------------------------------------------ | --------------------------------------------- | ------------- |
 | [GET /api/albums](#api-get-api-albums)                                                                 | 读取 albums                                   | 公开/可选身份 |
+| [GET /api/albums/tags](#api-get-api-albums-tags)                                                       | 读取 专辑与曲目                               | 公开/可选身份 |
 | [GET /api/albums/:slug](#api-get-api-albums-slug)                                                      | 读取 albums                                   | 公开/可选身份 |
 | [GET /api/albums/:id/posts](#api-get-api-albums-id-posts)                                              | 读取 albums / posts                           | 公开/可选身份 |
 | [POST /api/albums](#api-post-api-albums)                                                               | 创建/提交/触发 albums                         | 管理员        |
@@ -392,96 +386,97 @@ parseInteger 仅在对应路由显式调用时生效；数值输入会被转整�
 
 #### 14. 管理后台与系统配置
 
-| 接口                                                                                                                  | 用途                                                         | 权限/条件      |
-| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | -------------- |
-| [GET /api/admin/media-maintenance/scan](#api-get-api-admin-media-maintenance-scan)                                    | 读取 admin / media maintenance / scan                        | 管理员         |
-| [POST /api/admin/media-maintenance/reconcile](#api-post-api-admin-media-maintenance-reconcile)                        | 创建/提交/触发 admin / media maintenance / reconcile         | 管理员         |
-| [POST /api/admin/media-maintenance/bind-legacy](#api-post-api-admin-media-maintenance-bind-legacy)                    | 创建/提交/触发 admin / media maintenance / bind legacy       | 管理员         |
-| [POST /api/admin/media-maintenance/localize](#api-post-api-admin-media-maintenance-localize)                          | 创建/提交/触发 admin / media maintenance / localize          | 管理员         |
-| [POST /api/admin/media-maintenance/repair-thumbnails](#api-post-api-admin-media-maintenance-repair-thumbnails)        | 创建/提交/触发 admin / media maintenance / repair thumbnails | 管理员         |
-| [POST /api/admin/media-maintenance/orphans/preview](#api-post-api-admin-media-maintenance-orphans-preview)            | 创建/提交/触发 admin / media maintenance / orphans           | 管理员         |
-| [POST /api/admin/media-maintenance/orphans/delete](#api-post-api-admin-media-maintenance-orphans-delete)              | 创建/提交/触发 admin / media maintenance / orphans           | 超级管理员     |
-| [GET /api/admin/review-queue/count](#api-get-api-admin-review-queue-count)                                            | 读取 admin / review queue / count                            | 管理员         |
-| [GET /api/admin/review-queue](#api-get-api-admin-review-queue)                                                        | 读取 admin / review queue                                    | 管理员         |
-| [PUT /api/admin/review-queue/:id/approve](#api-put-api-admin-review-queue-id-approve)                                 | 更新/执行 admin / review queue / approve                     | 管理员         |
-| [PUT /api/admin/review-queue/:id/reject](#api-put-api-admin-review-queue-id-reject)                                   | 更新/执行 admin / review queue / reject                      | 管理员         |
-| [POST /api/admin/review/:type/:id/:action](#api-post-api-admin-review-type-id-action)                                 | 创建/提交/触发 admin / review                                | 管理员         |
-| [GET /api/admin/sensitive-words](#api-get-api-admin-sensitive-words)                                                  | 读取 admin / sensitive words                                 | 管理员         |
-| [POST /api/admin/sensitive-words](#api-post-api-admin-sensitive-words)                                                | 创建/提交/触发 admin / sensitive words                       | 超级管理员     |
-| [DELETE /api/admin/sensitive-words/:id](#api-delete-api-admin-sensitive-words-id)                                     | 删除/移除 admin / sensitive words                            | 超级管理员     |
-| [GET /api/admin/locks](#api-get-api-admin-locks)                                                                      | 读取 admin / locks                                           | 管理员         |
-| [POST /api/admin/locks](#api-post-api-admin-locks)                                                                    | 创建/提交/触发 admin / locks                                 | 已认证且未封禁 |
-| [DELETE /api/admin/locks/:id](#api-delete-api-admin-locks-id)                                                         | 删除/移除 admin / locks                                      | 已认证且未封禁 |
-| [DELETE /api/admin/locks](#api-delete-api-admin-locks)                                                                | 删除/移除 admin / locks                                      | 管理员         |
-| [GET /api/admin/moderation_logs](#api-get-api-admin-moderation-logs)                                                  | 读取 admin / moderation logs                                 | 管理员         |
-| [GET /api/admin/ban_logs](#api-get-api-admin-ban-logs)                                                                | 读取 admin / ban logs                                        | 管理员         |
-| [PATCH /api/admin/music/batch-display](#api-patch-api-admin-music-batch-display)                                      | 部分更新 admin / music / batch display                       | 管理员         |
-| [POST /api/admin/batch-delete-posts](#api-post-api-admin-batch-delete-posts)                                          | 创建/提交/触发 admin / batch delete posts                    | 管理员         |
-| [POST /api/admin/batch-delete-galleries](#api-post-api-admin-batch-delete-galleries)                                  | 创建/提交/触发 admin / batch delete galleries                | 管理员         |
-| [POST /api/admin/batch-delete-comments](#api-post-api-admin-batch-delete-comments)                                    | 创建/提交/触发 admin / batch delete comments                 | 管理员         |
-| [GET /api/admin/wiki-links/scan](#api-get-api-admin-wiki-links-scan)                                                  | 读取 admin / wiki links / scan                               | 管理员         |
-| [GET /api/admin/wiki-links/:slug](#api-get-api-admin-wiki-links-slug)                                                 | 读取 admin / wiki links                                      | 管理员         |
-| [PUT /api/admin/wiki-links/:id](#api-put-api-admin-wiki-links-id)                                                     | 更新/执行 admin / wiki links                                 | 管理员         |
-| [POST /api/admin/wiki-links/update](#api-post-api-admin-wiki-links-update)                                            | 创建/提交/触发 admin / wiki links / update                   | 管理员         |
-| [POST /api/admin/wiki-links/switch-storage](#api-post-api-admin-wiki-links-switch-storage)                            | 创建/提交/触发 admin / wiki links / switch storage           | 管理员         |
-| [POST /api/admin/wiki-links/sync-with-imagemap](#api-post-api-admin-wiki-links-sync-with-imagemap)                    | 创建/提交/触发 admin / wiki links / sync with imagemap       | 管理员         |
-| [POST /api/admin/backup/create](#api-post-api-admin-backup-create)                                                    | 创建/提交/触发 admin / backup / create                       | 超级管理员     |
-| [GET /api/admin/backup/list](#api-get-api-admin-backup-list)                                                          | 读取 admin / backup / list                                   | 超级管理员     |
-| [POST /api/admin/backup/:filename/note](#api-post-api-admin-backup-filename-note)                                     | 创建/提交/触发 admin / backup / note                         | 超级管理员     |
-| [POST /api/admin/backup/:filename/download](#api-post-api-admin-backup-filename-download)                             | 创建/提交/触发 admin / backup / download                     | 超级管理员     |
-| [POST /api/admin/backup/restore](#api-post-api-admin-backup-restore)                                                  | 创建/提交/触发 admin / backup / restore                      | 超级管理员     |
-| [POST /api/admin/backup/:filename/restore](#api-post-api-admin-backup-filename-restore)                               | 创建/提交/触发 admin / backup / restore                      | 超级管理员     |
-| [POST /api/admin/backup/media-reports/:filename/download](#api-post-api-admin-backup-media-reports-filename-download) | 创建/提交/触发 admin / backup / media reports                | 超级管理员     |
-| [POST /api/admin/backup/:filename/delete](#api-post-api-admin-backup-filename-delete)                                 | 创建/提交/触发 admin / backup / delete                       | 超级管理员     |
-| [POST /api/admin/wiki-categories](#api-post-api-admin-wiki-categories)                                                | 创建/提交/触发 admin / wiki categories                       | 管理员         |
-| [PATCH /api/admin/wiki-categories/:id](#api-patch-api-admin-wiki-categories-id)                                       | 部分更新 admin / wiki categories                             | 管理员         |
-| [GET /api/admin/:tab](#api-get-api-admin-tab)                                                                         | 读取 admin                                                   | 管理员         |
-| [GET /api/admin/:tab/:id](#api-get-api-admin-tab-id)                                                                  | 读取 admin                                                   | 管理员         |
-| [DELETE /api/admin/:tab/:id](#api-delete-api-admin-tab-id)                                                            | 删除/移除 admin                                              | 管理员         |
-| [POST /api/admin/:tab/:id/restore](#api-post-api-admin-tab-id-restore)                                                | 创建/提交/触发 admin / restore                               | 管理员         |
-| [DELETE /api/admin/:tab/:id/permanent](#api-delete-api-admin-tab-id-permanent)                                        | 删除/移除 admin / permanent                                  | 管理员         |
-| [GET /api/admin/media-health/scan](#api-get-api-admin-media-health-scan)                                              | 读取 admin / media health / scan                             | 管理员         |
-| [POST /api/admin/media-health/cleanup](#api-post-api-admin-media-health-cleanup)                                      | 创建/提交/触发 admin / media health / cleanup                | 管理员         |
-| [GET /api/admin/dashboard](#api-get-api-admin-dashboard)                                                              | 读取 admin / dashboard                                       | 管理员         |
-| [GET /api/admin/rate-limits/config](#api-get-api-admin-rate-limits-config)                                            | 读取 admin / rate limits / config                            | 超级管理员     |
-| [PATCH /api/admin/rate-limits/config](#api-patch-api-admin-rate-limits-config)                                        | 部分更新 admin / rate limits / config                        | 超级管理员     |
-| [POST /api/admin/rate-limits/config/reset](#api-post-api-admin-rate-limits-config-reset)                              | 创建/提交/触发 admin / rate limits / config                  | 超级管理员     |
-| [GET /api/admin/runtime-config](#api-get-api-admin-runtime-config)                                                    | 读取 admin / runtime config                                  | 超级管理员     |
-| [PATCH /api/admin/runtime-config](#api-patch-api-admin-runtime-config)                                                | 部分更新 admin / runtime config                              | 超级管理员     |
-| [POST /api/admin/runtime-config/reset](#api-post-api-admin-runtime-config-reset)                                      | 创建/提交/触发 admin / runtime config / reset                | 超级管理员     |
-| [GET /api/admin/secrets-config](#api-get-api-admin-secrets-config)                                                    | 读取 admin / secrets config                                  | 超级管理员     |
-| [PATCH /api/admin/secrets-config](#api-patch-api-admin-secrets-config)                                                | 部分更新 admin / secrets config                              | 超级管理员     |
-| [GET /api/admin/disk/status](#api-get-api-admin-disk-status)                                                          | 读取 admin / disk / status                                   | 管理员         |
-| [GET /api/admin/disk/config](#api-get-api-admin-disk-config)                                                          | 读取 admin / disk / config                                   | 管理员         |
-| [PUT /api/admin/disk/config](#api-put-api-admin-disk-config)                                                          | 更新/执行 admin / disk / config                              | 管理员         |
-| [POST /api/admin/disk/config/reset](#api-post-api-admin-disk-config-reset)                                            | 创建/提交/触发 admin / disk / config                         | 管理员         |
-| [POST /api/admin/disk/check](#api-post-api-admin-disk-check)                                                          | 创建/提交/触发 admin / disk / check                          | 管理员         |
-| [POST /api/admin/disk/monitor/stop](#api-post-api-admin-disk-monitor-stop)                                            | 创建/提交/触发 admin / disk / monitor                        | 管理员         |
-| [POST /api/admin/disk/monitor/resume](#api-post-api-admin-disk-monitor-resume)                                        | 创建/提交/触发 admin / disk / monitor                        | 管理员         |
-| [GET /api/admin/variants/stats](#api-get-api-admin-variants-stats)                                                    | 读取 admin / variants / stats                                | 管理员         |
-| [GET /api/admin/cloud-sync/stats](#api-get-api-admin-cloud-sync-stats)                                                | 读取 admin / cloud sync / stats                              | 管理员         |
-| [POST /api/admin/rebuild-all-variants](#api-post-api-admin-rebuild-all-variants)                                      | 创建/提交/触发 admin / rebuild all variants                  | 管理员         |
-| [GET /api/admin/rebuild-status/:jobId](#api-get-api-admin-rebuild-status-jobid)                                       | 读取 admin / rebuild status                                  | 管理员         |
-| [GET /api/admin/cleanup/stats](#api-get-api-admin-cleanup-stats)                                                      | 读取 admin / cleanup / stats                                 | 管理员         |
-| [GET /api/config/gallery-access](#api-get-api-config-gallery-access)                                                  | 读取 config / gallery access                                 | 公开/可选身份  |
-| [GET /api/config/features](#api-get-api-config-features)                                                              | 读取 config / features                                       | 公开/可选身份  |
-| [GET /api/config/admin-permissions](#api-get-api-config-admin-permissions)                                            | 读取 config / admin permissions                              | 超级管理员     |
-| [GET /api/config/registration/admin](#api-get-api-config-registration-admin)                                          | 读取 config / registration / admin                           | 超级管理员     |
-| [PATCH /api/config/registration](#api-patch-api-config-registration)                                                  | 部分更新 config / registration                               | 超级管理员     |
-| [GET /api/config/search-hot-keywords/admin](#api-get-api-config-search-hot-keywords-admin)                            | 读取 config / search hot keywords / admin                    | 超级管理员     |
-| [PATCH /api/config/search-hot-keywords](#api-patch-api-config-search-hot-keywords)                                    | 部分更新 config / search hot keywords                        | 超级管理员     |
-| [GET /api/config/email-verification](#api-get-api-config-email-verification)                                          | 读取 config / email verification                             | 公开/可选身份  |
-| [GET /api/config/email-verification/admin](#api-get-api-config-email-verification-admin)                              | 读取 config / email verification / admin                     | 超级管理员     |
-| [PATCH /api/config/email-verification](#api-patch-api-config-email-verification)                                      | 部分更新 config / email verification                         | 超级管理员     |
-| [GET /api/config/image-preference](#api-get-api-config-image-preference)                                              | 读取 config / image preference                               | 公开/可选身份  |
-| [PATCH /api/config/image-preference](#api-patch-api-config-image-preference)                                          | 部分更新 config / image preference                           | 管理员         |
-| [GET /api/config/image-sync](#api-get-api-config-image-sync)                                                          | 读取 config / image sync                                     | 管理员         |
-| [POST /api/config/image-sync](#api-post-api-config-image-sync)                                                        | 创建/提交/触发 config / image sync                           | 管理员         |
-| [DELETE /api/config/image-sync/:taskId](#api-delete-api-config-image-sync-taskid)                                     | 删除/移除 config / image sync                                | 管理员         |
-| [GET /api/config/s3/config](#api-get-api-config-s3-config)                                                            | 读取 config / s3 / config                                    | 管理员         |
-| [GET /api/config/s3/presign-upload](#api-get-api-config-s3-presign-upload)                                            | 读取 config / s3 / presign upload                            | 已认证且未封禁 |
-| [GET /api/config/s3/presign-download/\*key](#api-get-api-config-s3-presign-download-wildcard-key)                     | 读取 config / s3 / presign download                          | 已认证         |
-| [GET /api/config/s3/presign-delete/\*key](#api-get-api-config-s3-presign-delete-wildcard-key)                         | 读取 config / s3 / presign delete                            | 管理员         |
+| 接口                                                                                                                | 用途                                                         | 权限/条件      |
+| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | -------------- |
+| [GET /api/admin/media-maintenance/scan](#api-get-api-admin-media-maintenance-scan)                                  | 读取 admin / media maintenance / scan                        | 管理员         |
+| [POST /api/admin/media-maintenance/reconcile](#api-post-api-admin-media-maintenance-reconcile)                      | 创建/提交/触发 admin / media maintenance / reconcile         | 管理员         |
+| [POST /api/admin/media-maintenance/bind-legacy](#api-post-api-admin-media-maintenance-bind-legacy)                  | 创建/提交/触发 admin / media maintenance / bind legacy       | 管理员         |
+| [POST /api/admin/media-maintenance/localize](#api-post-api-admin-media-maintenance-localize)                        | 创建/提交/触发 admin / media maintenance / localize          | 管理员         |
+| [POST /api/admin/media-maintenance/repair-thumbnails](#api-post-api-admin-media-maintenance-repair-thumbnails)      | 创建/提交/触发 admin / media maintenance / repair thumbnails | 管理员         |
+| [POST /api/admin/media-maintenance/orphans/preview](#api-post-api-admin-media-maintenance-orphans-preview)          | 创建/提交/触发 admin / media maintenance / orphans           | 管理员         |
+| [POST /api/admin/media-maintenance/orphans/delete](#api-post-api-admin-media-maintenance-orphans-delete)            | 创建/提交/触发 admin / media maintenance / orphans           | 超级管理员     |
+| [GET /api/admin/review-queue/count](#api-get-api-admin-review-queue-count)                                          | 读取 admin / review queue / count                            | 管理员         |
+| [GET /api/admin/review-queue](#api-get-api-admin-review-queue)                                                      | 读取 admin / review queue                                    | 管理员         |
+| [PUT /api/admin/review-queue/:id/approve](#api-put-api-admin-review-queue-id-approve)                               | 更新/执行 admin / review queue / approve                     | 管理员         |
+| [PUT /api/admin/review-queue/:id/reject](#api-put-api-admin-review-queue-id-reject)                                 | 更新/执行 admin / review queue / reject                      | 管理员         |
+| [POST /api/admin/review/:type/:id/:action](#api-post-api-admin-review-type-id-action)                               | 创建/提交/触发 admin / review                                | 管理员         |
+| [GET /api/admin/sensitive-words](#api-get-api-admin-sensitive-words)                                                | 读取 admin / sensitive words                                 | 管理员         |
+| [POST /api/admin/sensitive-words](#api-post-api-admin-sensitive-words)                                              | 创建/提交/触发 admin / sensitive words                       | 超级管理员     |
+| [DELETE /api/admin/sensitive-words/:id](#api-delete-api-admin-sensitive-words-id)                                   | 删除/移除 admin / sensitive words                            | 超级管理员     |
+| [GET /api/admin/locks](#api-get-api-admin-locks)                                                                    | 读取 admin / locks                                           | 管理员         |
+| [POST /api/admin/locks](#api-post-api-admin-locks)                                                                  | 创建/提交/触发 admin / locks                                 | 已认证且未封禁 |
+| [DELETE /api/admin/locks/:id](#api-delete-api-admin-locks-id)                                                       | 删除/移除 admin / locks                                      | 已认证且未封禁 |
+| [DELETE /api/admin/locks](#api-delete-api-admin-locks)                                                              | 删除/移除 admin / locks                                      | 管理员         |
+| [GET /api/admin/moderation_logs](#api-get-api-admin-moderation-logs)                                                | 读取 admin / moderation logs                                 | 管理员         |
+| [GET /api/admin/ban_logs](#api-get-api-admin-ban-logs)                                                              | 读取 admin / ban logs                                        | 管理员         |
+| [PATCH /api/admin/music/batch-display](#api-patch-api-admin-music-batch-display)                                    | 部分更新 admin / music / batch display                       | 管理员         |
+| [POST /api/admin/batch-delete-posts](#api-post-api-admin-batch-delete-posts)                                        | 创建/提交/触发 admin / batch delete posts                    | 管理员         |
+| [POST /api/admin/batch-delete-galleries](#api-post-api-admin-batch-delete-galleries)                                | 创建/提交/触发 admin / batch delete galleries                | 管理员         |
+| [POST /api/admin/batch-delete-comments](#api-post-api-admin-batch-delete-comments)                                  | 创建/提交/触发 admin / batch delete comments                 | 管理员         |
+| [GET /api/admin/wiki-links/scan](#api-get-api-admin-wiki-links-scan)                                                | 读取 admin / wiki links / scan                               | 管理员         |
+| [GET /api/admin/wiki-links/:slug](#api-get-api-admin-wiki-links-slug)                                               | 读取 admin / wiki links                                      | 管理员         |
+| [PUT /api/admin/wiki-links/:id](#api-put-api-admin-wiki-links-id)                                                   | 更新/执行 admin / wiki links                                 | 管理员         |
+| [POST /api/admin/wiki-links/update](#api-post-api-admin-wiki-links-update)                                          | 创建/提交/触发 admin / wiki links / update                   | 管理员         |
+| [POST /api/admin/wiki-links/switch-storage](#api-post-api-admin-wiki-links-switch-storage)                          | 创建/提交/触发 admin / wiki links / switch storage           | 管理员         |
+| [POST /api/admin/wiki-links/sync-with-imagemap](#api-post-api-admin-wiki-links-sync-with-imagemap)                  | 创建/提交/触发 admin / wiki links / sync with imagemap       | 管理员         |
+| [POST /api/admin/backup/create](#api-post-api-admin-backup-create)                                                  | 创建/提交/触发 admin / backup / create                       | 超级管理员     |
+| [GET /api/admin/backup/list](#api-get-api-admin-backup-list)                                                        | 读取 admin / backup / list                                   | 超级管理员     |
+| [POST /api/admin/backup/:filename/note](#api-post-api-admin-backup-filename-note)                                   | 创建/提交/触发 admin / backup / note                         | 超级管理员     |
+| [GET /api/admin/backup/:filename/download](#api-get-api-admin-backup-filename-download)                             | 创建/提交/触发 admin / backup / download                     | 超级管理员     |
+| [POST /api/admin/backup/restore](#api-post-api-admin-backup-restore)                                                | 创建/提交/触发 admin / backup / restore                      | 超级管理员     |
+| [POST /api/admin/backup/:filename/restore](#api-post-api-admin-backup-filename-restore)                             | 创建/提交/触发 admin / backup / restore                      | 超级管理员     |
+| [GET /api/admin/backup/media-reports/:filename/download](#api-get-api-admin-backup-media-reports-filename-download) | 创建/提交/触发 admin / backup / media reports                | 超级管理员     |
+| [POST /api/admin/backup/:filename/delete](#api-post-api-admin-backup-filename-delete)                               | 创建/提交/触发 admin / backup / delete                       | 超级管理员     |
+| [POST /api/admin/wiki-categories](#api-post-api-admin-wiki-categories)                                              | 创建/提交/触发 admin / wiki categories                       | 管理员         |
+| [PATCH /api/admin/wiki-categories/:id](#api-patch-api-admin-wiki-categories-id)                                     | 部分更新 admin / wiki categories                             | 管理员         |
+| [GET /api/admin/:tab](#api-get-api-admin-tab)                                                                       | 读取 admin                                                   | 管理员         |
+| [GET /api/admin/:tab/:id](#api-get-api-admin-tab-id)                                                                | 读取 admin                                                   | 管理员         |
+| [DELETE /api/admin/:tab/:id](#api-delete-api-admin-tab-id)                                                          | 删除/移除 admin                                              | 管理员         |
+| [POST /api/admin/:tab/:id/restore](#api-post-api-admin-tab-id-restore)                                              | 创建/提交/触发 admin / restore                               | 管理员         |
+| [DELETE /api/admin/:tab/:id/permanent](#api-delete-api-admin-tab-id-permanent)                                      | 删除/移除 admin / permanent                                  | 管理员         |
+| [GET /api/admin/media-health/scan](#api-get-api-admin-media-health-scan)                                            | 读取 admin / media health / scan                             | 管理员         |
+| [POST /api/admin/media-health/cleanup](#api-post-api-admin-media-health-cleanup)                                    | 创建/提交/触发 admin / media health / cleanup                | 管理员         |
+| [GET /api/admin/dashboard](#api-get-api-admin-dashboard)                                                            | 读取 admin / dashboard                                       | 管理员         |
+| [GET /api/admin/rate-limits/config](#api-get-api-admin-rate-limits-config)                                          | 读取 admin / rate limits / config                            | 超级管理员     |
+| [PATCH /api/admin/rate-limits/config](#api-patch-api-admin-rate-limits-config)                                      | 部分更新 admin / rate limits / config                        | 超级管理员     |
+| [POST /api/admin/rate-limits/config/reset](#api-post-api-admin-rate-limits-config-reset)                            | 创建/提交/触发 admin / rate limits / config                  | 超级管理员     |
+| [GET /api/admin/runtime-config](#api-get-api-admin-runtime-config)                                                  | 读取 admin / runtime config                                  | 超级管理员     |
+| [PATCH /api/admin/runtime-config](#api-patch-api-admin-runtime-config)                                              | 部分更新 admin / runtime config                              | 超级管理员     |
+| [POST /api/admin/runtime-config/reset](#api-post-api-admin-runtime-config-reset)                                    | 创建/提交/触发 admin / runtime config / reset                | 超级管理员     |
+| [GET /api/admin/secrets-config](#api-get-api-admin-secrets-config)                                                  | 读取 admin / secrets config                                  | 超级管理员     |
+| [PATCH /api/admin/secrets-config](#api-patch-api-admin-secrets-config)                                              | 部分更新 admin / secrets config                              | 超级管理员     |
+| [GET /api/admin/disk/status](#api-get-api-admin-disk-status)                                                        | 读取 admin / disk / status                                   | 管理员         |
+| [GET /api/admin/disk/config](#api-get-api-admin-disk-config)                                                        | 读取 admin / disk / config                                   | 管理员         |
+| [PUT /api/admin/disk/config](#api-put-api-admin-disk-config)                                                        | 更新/执行 admin / disk / config                              | 管理员         |
+| [POST /api/admin/disk/config/reset](#api-post-api-admin-disk-config-reset)                                          | 创建/提交/触发 admin / disk / config                         | 管理员         |
+| [POST /api/admin/disk/check](#api-post-api-admin-disk-check)                                                        | 创建/提交/触发 admin / disk / check                          | 管理员         |
+| [POST /api/admin/disk/monitor/stop](#api-post-api-admin-disk-monitor-stop)                                          | 创建/提交/触发 admin / disk / monitor                        | 管理员         |
+| [POST /api/admin/disk/monitor/resume](#api-post-api-admin-disk-monitor-resume)                                      | 创建/提交/触发 admin / disk / monitor                        | 管理员         |
+| [GET /api/admin/variants/stats](#api-get-api-admin-variants-stats)                                                  | 读取 admin / variants / stats                                | 管理员         |
+| [GET /api/admin/cloud-sync/stats](#api-get-api-admin-cloud-sync-stats)                                              | 读取 admin / cloud sync / stats                              | 管理员         |
+| [POST /api/admin/rebuild-all-variants](#api-post-api-admin-rebuild-all-variants)                                    | 创建/提交/触发 admin / rebuild all variants                  | 管理员         |
+| [GET /api/admin/rebuild-status/:jobId](#api-get-api-admin-rebuild-status-jobid)                                     | 读取 admin / rebuild status                                  | 管理员         |
+| [GET /api/admin/cleanup/stats](#api-get-api-admin-cleanup-stats)                                                    | 读取 admin / cleanup / stats                                 | 管理员         |
+| [GET /api/config/gallery-access](#api-get-api-config-gallery-access)                                                | 读取 config / gallery access                                 | 公开/可选身份  |
+| [GET /api/config/features](#api-get-api-config-features)                                                            | 读取 config / features                                       | 公开/可选身份  |
+| [GET /api/config/turnstile](#api-get-api-config-turnstile)                                                          | 读取 站点配置                                                | 公开/可选身份  |
+| [GET /api/config/admin-permissions](#api-get-api-config-admin-permissions)                                          | 读取 config / admin permissions                              | 超级管理员     |
+| [GET /api/config/registration/admin](#api-get-api-config-registration-admin)                                        | 读取 config / registration / admin                           | 超级管理员     |
+| [PATCH /api/config/registration](#api-patch-api-config-registration)                                                | 部分更新 config / registration                               | 超级管理员     |
+| [GET /api/config/search-hot-keywords/admin](#api-get-api-config-search-hot-keywords-admin)                          | 读取 config / search hot keywords / admin                    | 超级管理员     |
+| [PATCH /api/config/search-hot-keywords](#api-patch-api-config-search-hot-keywords)                                  | 部分更新 config / search hot keywords                        | 超级管理员     |
+| [GET /api/config/email-verification](#api-get-api-config-email-verification)                                        | 读取 config / email verification                             | 公开/可选身份  |
+| [GET /api/config/email-verification/admin](#api-get-api-config-email-verification-admin)                            | 读取 config / email verification / admin                     | 超级管理员     |
+| [PATCH /api/config/email-verification](#api-patch-api-config-email-verification)                                    | 部分更新 config / email verification                         | 超级管理员     |
+| [GET /api/config/image-preference](#api-get-api-config-image-preference)                                            | 读取 config / image preference                               | 公开/可选身份  |
+| [PATCH /api/config/image-preference](#api-patch-api-config-image-preference)                                        | 部分更新 config / image preference                           | 管理员         |
+| [GET /api/config/image-sync](#api-get-api-config-image-sync)                                                        | 读取 config / image sync                                     | 管理员         |
+| [POST /api/config/image-sync](#api-post-api-config-image-sync)                                                      | 创建/提交/触发 config / image sync                           | 管理员         |
+| [DELETE /api/config/image-sync/:taskId](#api-delete-api-config-image-sync-taskid)                                   | 删除/移除 config / image sync                                | 管理员         |
+| [GET /api/config/s3/config](#api-get-api-config-s3-config)                                                          | 读取 config / s3 / config                                    | 管理员         |
+| [GET /api/config/s3/presign-upload](#api-get-api-config-s3-presign-upload)                                          | 读取 config / s3 / presign upload                            | 已认证且未封禁 |
+| [GET /api/config/s3/presign-download/\*key](#api-get-api-config-s3-presign-download-wildcard-key)                   | 读取 config / s3 / presign download                          | 已认证         |
+| [GET /api/config/s3/presign-delete/\*key](#api-get-api-config-s3-presign-delete-wildcard-key)                       | 读取 config / s3 / presign delete                            | 管理员         |
 
 #### 15. 语义检索与运维任务
 
@@ -519,10 +514,6 @@ parseInteger 仅在对应路由显式调用时生效；数值输入会被转整�
 - POST /api/auth/resend-verification：JSON email；为避免泄漏账户是否存在，成功消息相同；邮箱验证功能关闭返回 400 EMAIL_VERIFICATION_DISABLED。
 - POST /api/auth/password-reset/request：JSON email；邮件服务需配置；对未知邮箱仍用统一成功消息。
 - POST /api/auth/password-reset/confirm：JSON token、newPassword；一次性 token 检查、作废及改密在事务中完成；无效/过期 token 为 400。
-- POST /api/auth/login：JSON email、password；成功建立网站 Cookie 会话并返回 {user}；错误凭据 401。有效 API key 调用 403 API_KEY_SESSION_FORBIDDEN。
-- POST /api/auth/wechat/login：JSON code 必填，displayName/photoURL 可选；需要微信小程序服务凭证。成功建立 Cookie 会话；有效 API key 调用 403 API_KEY_SESSION_FORBIDDEN。
-- POST /api/auth/logout：清除登录 Cookie，返回 {success:true}；Bearer key 调用 403 API_KEY_SESSION_FORBIDDEN。
-- GET/POST/DELETE /api/users/me/api-keys：Cookie-only。列表 {keys:[{id,name,prefix,createdAt,expiresAt,lastUsedAt,revokedAt}]}；创建 body name（1–100 字符）、expiry（30d/90d/365d/never，默认 90d），201 {key,token}，token 只返回一次；DELETE :id 撤销当前账户自己的 key。写请求需网站 XSRF。
 
 ```bash
 curl --fail-with-body -H 'Content-Type: application/json' \
@@ -538,7 +529,7 @@ curl --fail-with-body -H 'Content-Type: application/json' \
 - PUT /api/users/name：body displayName；按统一名称规则校验。
 - PUT /api/users/email：body currentPassword、newEmail；需要当前密码；邮箱变更会清除 emailVerifiedAt 并使未用验证 token 失效。邮箱冲突 409。
 - PUT /api/users/password：body currentPassword、newPassword；当前密码错误 401，新密码按服务端规则校验。Bearer 调用只返回 {success:true}，不会签发网页登录会话；不撤销 API key。
-- PUT /api/users/phone：目前停用，返回 501 USER_PHONE_NOT_IMPLEMENTED 类错误正文（以实际 error 文本为准）。
+- PUT /api/users/phone：目前停用；空手机号返回 400，非空手机号返回 501，正文为 {error}。
 - DELETE /api/users/account：软注销账户、清除个人资料/头像、封禁账户并撤销未撤销密钥；返回 {success:true}。不等同数据库物理删除。
 - GET /api/users：管理员最近 100 个账户，返回 {users}，没有分页参数。
 - PUT /api/users/:userId/status：超级管理员；body status=active|banned，可选 banReason；写用户封禁日志。
@@ -552,7 +543,7 @@ curl --fail-with-body -H 'Content-Type: application/json' \
 - GET /api/users/:userId/posts|galleries|wiki|comments|favorites|history：路径 userId 实际传 publicId。内容按目标可见性过滤；收藏/历史要用户公开偏好或本人/管理员权限。子资源 ID 仍遵循各自 ID 类型。各列表分页字段以逐接口条目为准。
 - GET /api/users/:userId/likes：需认证；用户只能看自己的点赞，管理员可查看他人。返回 likes 与顶层统一分页元数据；total 统计全部点赞记录，帖子可见性过滤可能使 likes 数量少于 limit。
 
-### 逐接口契约（39 项）
+### 逐接口契约（33 项）
 
 <a id="api-get-api-auth-health"></a>
 
@@ -560,10 +551,9 @@ curl --fail-with-body -H 'Content-Type: application/json' \
 
 - 用途：读取 auth / health；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>status</code>、<code>timestamp</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200。无显式错误状态。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_auth_health`。
+- 成功响应：HTTP 200：application/json <code>status</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 401, 429。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/auth/health"
@@ -575,10 +565,9 @@ curl --fail-with-body "$BASE_URL/api/auth/health"
 
 - 用途：读取 auth / me；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>user</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200。无显式错误状态。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_auth_me`。
+- 成功响应：HTTP 200：application/json <code>user</code>。
+- HTTP 状态/失败：200, 401, 429。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/auth/me"
@@ -590,10 +579,9 @@ curl --fail-with-body "$BASE_URL/api/auth/me"
 
 - 用途：创建/提交/触发 auth / register；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：公开/可选身份。限流器 authRateLimiter。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart displayName: optional string；email: required string；password: required string；validateBody schema registerSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>；HTTP 201: <code>success</code>、<code>requiresEmailVerification</code>、<code>verificationEmailSent</code>、<code>user</code>；HTTP 400: <code>error</code>；HTTP 403: <code>response from registrationClosedPayload</code>；HTTP 409: <code>error</code>；HTTP 500: <code>error</code>；HTTP 503: <code>error</code>、<code>code</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 201, 400, 403, 409, 500, 503。HTTP 400: 邮箱和密码不能为空；HTTP 409: 该邮箱已注册；HTTP 500: 注册失败，请稍后重试。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：email 必填 string；password 必填 string ≤128 字符；displayName 可选 string ≤50 字符；turnstileToken 可选 string ≤4096 字符。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_auth_register`。
+- 成功响应：HTTP 201：application/json <code>success</code>、<code>requiresEmailVerification</code>、<code>verificationEmailSent</code>、<code>user</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 409, 429, 500, 503, default。HTTP 400: 邮箱和密码不能为空；HTTP 409: 该邮箱已注册；HTTP 500: 注册失败，请稍后重试。
 
 ```bash
 curl --fail-with-body -X POST -H 'Content-Type: application/json' --data '{"displayName":"文档测试用户","email":"user@example.invalid","password":"REPLACE_WITH_TEST_PASSWORD"}' "$BASE_URL/api/auth/register"
@@ -605,10 +593,9 @@ curl --fail-with-body -X POST -H 'Content-Type: application/json' --data '{"disp
 
 - 用途：创建/提交/触发 auth / verify email；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：公开/可选身份。限流器 emailVerificationLimiter。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart token: required string；validateBody schema verifyEmailSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>purpose</code>；HTTP 400: <code>error</code>、<code>code</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 500: 邮箱验证失败，请稍后重试。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：token 必填 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_auth_verify_email`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>purpose</code>。
+- HTTP 状态/失败：200, 400, 401, 429, 500。HTTP 500: 邮箱验证失败，请稍后重试。
 
 ```bash
 curl --fail-with-body -X POST -H 'Content-Type: application/json' --data '{"token":"REPLACE_WITH_TOKEN"}' "$BASE_URL/api/auth/verify-email"
@@ -620,10 +607,9 @@ curl --fail-with-body -X POST -H 'Content-Type: application/json' --data '{"toke
 
 - 用途：创建/提交/触发 auth / resend verification；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：公开/可选身份。限流器 emailVerificationLimiter。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart email: required string；validateBody schema resendEmailVerificationSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>message</code>；HTTP 400: <code>error</code>、<code>code</code>；HTTP 500: <code>error</code>；HTTP 503: <code>error</code>、<code>code</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500, 503。HTTP 400: 邮箱验证功能未开启；HTTP 500: 验证邮件发送失败，请稍后重试；code EMAIL_VERIFICATION_DISABLED。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：email 必填 string；turnstileToken 可选 string ≤4096 字符。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_auth_resend_verification`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>message</code>。
+- HTTP 状态/失败：200, 400, 401, 429, 500, 503。HTTP 400: 邮箱验证功能未开启；HTTP 500: 验证邮件发送失败，请稍后重试；code EMAIL_VERIFICATION_DISABLED。
 
 ```bash
 curl --fail-with-body -X POST -H 'Content-Type: application/json' --data '{"email":"user@example.invalid"}' "$BASE_URL/api/auth/resend-verification"
@@ -635,10 +621,9 @@ curl --fail-with-body -X POST -H 'Content-Type: application/json' --data '{"emai
 
 - 用途：创建/提交/触发 auth / password reset / request；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：公开/可选身份。限流器 passwordResetRequestLimiter。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart email: required string；validateBody schema passwordResetRequestSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>message</code>；HTTP 400: <code>error</code>、<code>code</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 400: 密码找回功能未开启；HTTP 500: 密码重置邮件发送失败，请稍后重试；code PASSWORD_RESET_DISABLED。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：email 必填 string；turnstileToken 可选 string ≤4096 字符。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_auth_password_reset_request`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>message</code>。
+- HTTP 状态/失败：200, 400, 401, 429, 500。HTTP 400: 密码找回功能未开启；HTTP 500: 密码重置邮件发送失败，请稍后重试；code PASSWORD_RESET_DISABLED。
 
 ```bash
 curl --fail-with-body -X POST -H 'Content-Type: application/json' --data '{"email":"user@example.invalid"}' "$BASE_URL/api/auth/password-reset/request"
@@ -650,103 +635,12 @@ curl --fail-with-body -X POST -H 'Content-Type: application/json' --data '{"emai
 
 - 用途：创建/提交/触发 auth / password reset / confirm；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：公开/可选身份。限流器 passwordResetConfirmLimiter。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart newPassword: required string；token: required string；validateBody schema passwordResetConfirmSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 400: <code>error</code>、<code>code</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 500: 密码重置失败，请稍后重试。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：token 必填 string；newPassword 必填 string ≤128 字符。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_auth_password_reset_confirm`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 400, 401, 429, 500。HTTP 500: 密码重置失败，请稍后重试。
 
 ```bash
 curl --fail-with-body -X POST -H 'Content-Type: application/json' --data '{"newPassword":"REPLACE_WITH_TEST_PASSWORD","token":"REPLACE_WITH_TOKEN"}' "$BASE_URL/api/auth/password-reset/confirm"
-```
-
-<a id="api-post-api-auth-login"></a>
-
-### POST /api/auth/login
-
-- 用途：创建/提交/触发 auth / login；目标资源与完整业务约束见第 4 章「用户资料与账号」。
-- 权限：公开/可选身份。限流器 authRateLimiter。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart email: required string；password: required string；validateBody schema loginSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>user</code>；HTTP 400: <code>error</code>；HTTP 401: <code>error</code>；HTTP 403: <code>error</code>、<code>code</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 邮箱和密码不能为空；HTTP 401: 邮箱或密码错误；HTTP 403: API 密钥不能获取登录会话；HTTP 500: 登录失败，请稍后重试；code API_KEY_SESSION_FORBIDDEN。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
-
-```bash
-curl --fail-with-body -X POST -H 'Content-Type: application/json' --data '{"email":"user@example.invalid","password":"REPLACE_WITH_TEST_PASSWORD"}' "$BASE_URL/api/auth/login"
-```
-
-<a id="api-post-api-auth-wechat-login"></a>
-
-### POST /api/auth/wechat/login
-
-- 用途：创建/提交/触发 auth / wechat / login；目标资源与完整业务约束见第 4 章「用户资料与账号」。
-- 权限：公开/可选身份。限流器 authRateLimiter。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart code: required string；displayName: optional string；photoURL: optional string|null; when using local asset must match asset URL。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>user</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>、<code>code</code>、<code>response from registrationClosedPayload</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 403, 500。HTTP 400: code 不能为空；HTTP 403: API 密钥不能获取登录会话；HTTP 500: 登录服务暂时不可用，请稍后重试；code API_KEY_SESSION_FORBIDDEN。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
-
-```bash
-curl --fail-with-body -X POST -H 'Content-Type: application/json' --data '{"code":"REPLACE_WITH_CODE","displayName":"文档测试用户","photoURL":"REPLACE_PHOTOURL"}' "$BASE_URL/api/auth/wechat/login"
-```
-
-<a id="api-post-api-auth-logout"></a>
-
-### POST /api/auth/logout
-
-- 用途：创建/提交/触发 auth / logout；目标资源与完整业务约束见第 4 章「用户资料与账号」。
-- 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 403: <code>error</code>、<code>code</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 403。HTTP 403: API 密钥不能获取登录会话；code API_KEY_SESSION_FORBIDDEN。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
-
-```bash
-curl --fail-with-body -X POST "$BASE_URL/api/auth/logout"
-```
-
-<a id="api-get-api-users-me-api-keys"></a>
-
-### GET /api/users/me/api-keys
-
-- 用途：读取 users / me / api keys；目标资源与完整业务约束见第 4 章「用户资料与账号」。
-- 权限：Cookie 会话 + CSRF。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>keys</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 403。HTTP 403 分支；触发条件见领域说明。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
-
-```bash
-curl --fail-with-body -b "$COOKIE_JAR" -H "X-XSRF-Token: $XSRF_TOKEN" "$BASE_URL/api/users/me/api-keys"
-```
-
-<a id="api-post-api-users-me-api-keys"></a>
-
-### POST /api/users/me/api-keys
-
-- 用途：创建/提交/触发 users / me / api keys；目标资源与完整业务约束见第 4 章「用户资料与账号」。
-- 权限：Cookie 会话 + CSRF。限流器 profileLimiter。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart expiry: required '30d' | '90d' | '365d' | 'never'；name: required string；validateBody schema createApiKeySchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 201: <code>key</code>、<code>token</code>；DTO transformer toApiKeyResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：201, 400, 403。HTTP 400/403 分支；触发条件见领域说明。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
-
-```bash
-curl --fail-with-body -X POST -b "$COOKIE_JAR" -H "X-XSRF-Token: $XSRF_TOKEN" -H 'Content-Type: application/json' --data '{"expiry":"90d","name":"文档测试名称"}' "$BASE_URL/api/users/me/api-keys"
-```
-
-<a id="api-delete-api-users-me-api-keys-id"></a>
-
-### DELETE /api/users/me/api-keys/:id
-
-- 用途：删除/移除 users / me / api keys；目标资源与完整业务约束见第 4 章「用户资料与账号」。
-- 权限：Cookie 会话 + CSRF。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 403, 404。HTTP 400: API 密钥 ID 不能为空；HTTP 404: API 密钥不存在。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
-
-```bash
-curl --fail-with-body -X DELETE -b "$COOKIE_JAR" -H "X-XSRF-Token: $XSRF_TOKEN" "$BASE_URL/api/users/me/api-keys/REPLACE_ID"
 ```
 
 <a id="api-get-api-users-status"></a>
@@ -755,10 +649,9 @@ curl --fail-with-body -X DELETE -b "$COOKIE_JAR" -H "X-XSRF-Token: $XSRF_TOKEN" 
 
 - 用途：读取 users / status；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：已认证。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>user</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toUserResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 用户不存在；HTTP 500: 获取用户状态失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_users_status`。
+- 成功响应：HTTP 200：application/json <code>user</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 404: 用户不存在；HTTP 500: 获取用户状态失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/users/status"
@@ -770,13 +663,12 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/users/status"
 
 - 用途：更新/执行 users / status；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：超级管理员。
-- 参数契约：path userId: required string path parameter；query 无 query 字段；body/multipart banReason: optional string；status: required UserStatus。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>user</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toUserResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 无效用户 / 无效状态；HTTP 500: 更新用户状态失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path userId 必填 string；query 无；application/json：status 必填 active|banned；banReason 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_users_userId_status`。
+- 成功响应：HTTP 200：application/json <code>user</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 无效用户 / 无效状态；HTTP 500: 更新用户状态失败。
 
 ```bash
-curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"banReason":"REPLACE_BANREASON","status":"draft"}' "$BASE_URL/api/users/REPLACE_USERID/status"
+curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"banReason":"隔离测试操作","status":"banned"}' "$BASE_URL/api/users/REPLACE_USERID/status"
 ```
 
 <a id="api-put-api-users-name"></a>
@@ -785,10 +677,9 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：更新/执行 users / name；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart displayName: optional string。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>、<code>user</code>；HTTP 500: <code>error</code>；DTO transformer toUserResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 更新昵称失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：displayName 可选 string ≤50 字符。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_users_name`。
+- 成功响应：HTTP 200：application/json <code>user</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500, default。HTTP 500: 更新昵称失败。
 
 ```bash
 curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"displayName":"文档测试用户"}' "$BASE_URL/api/users/name"
@@ -800,10 +691,9 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：更新/执行 users / email；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：已认证且未封禁。限流器 profileLimiter。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart currentPassword: required string；newEmail: required string；validateBody schema userEmailUpdateSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>requiresEmailVerification</code>、<code>message</code>；HTTP 400: <code>error</code>；HTTP 401: <code>error</code>；HTTP 409: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 409, 500。HTTP 400: 当前密码不正确 / 新邮箱不能与当前邮箱相同；HTTP 401: 当前密码不正确；HTTP 409: 该邮箱已注册；HTTP 500: 邮箱更新失败，请稍后重试。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：currentPassword 必填 string；newEmail 必填 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_users_email`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>requiresEmailVerification</code>、<code>message</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 409, 429, 500。HTTP 400: 当前密码不正确 / 新邮箱不能与当前邮箱相同；HTTP 401: 当前密码不正确；HTTP 409: 该邮箱已注册；HTTP 500: 邮箱更新失败，请稍后重试。
 
 ```bash
 curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"currentPassword":"REPLACE_WITH_TEST_PASSWORD","newEmail":"new-user@example.invalid"}' "$BASE_URL/api/users/email"
@@ -815,10 +705,9 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：更新/执行 users / phone；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart phone: required string。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 400: <code>error</code>；HTTP 500: <code>error</code>；HTTP 501: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：400, 401, 403, 500, 501。HTTP 400: 手机号不能为空；HTTP 500: 更新手机号失败；HTTP 501: 手机号功能暂未启用。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：phone 必填 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_users_phone`。
+- 成功响应：接口当前停用，无成功响应。
+- HTTP 状态/失败：400, 401, 403, 429, 500, 501。HTTP 400: 手机号不能为空；HTTP 500: 更新手机号失败；HTTP 501: 手机号功能暂未启用。
 
 ```bash
 curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"phone":"REPLACE_PHONE"}' "$BASE_URL/api/users/phone"
@@ -830,10 +719,9 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：更新/执行 users / password；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart currentPassword: required string；newPassword: required string。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 400: <code>error</code>；HTTP 401: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 密码不能为空 / 当前密码不正确；HTTP 401: 当前密码不正确；HTTP 500: 更新密码失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：currentPassword 必填 string；newPassword 必填 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_users_password`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>token</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 密码不能为空 / 当前密码不正确；HTTP 401: 当前密码不正确；HTTP 500: 更新密码失败。
 
 ```bash
 curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"currentPassword":"REPLACE_WITH_TEST_PASSWORD","newPassword":"REPLACE_WITH_TEST_PASSWORD"}' "$BASE_URL/api/users/password"
@@ -845,10 +733,9 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：读取 users / me；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>user</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toUserResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 用户不存在；HTTP 500: 获取用户信息失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_users_me`。
+- 成功响应：HTTP 200：application/json <code>user</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 用户不存在；HTTP 500: 获取用户信息失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/users/me"
@@ -860,10 +747,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/users/me"
 
 - 用途：部分更新 users / me；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：已认证且未封禁。限流器 profileLimiter。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart displayName?:string≤50; signature?:string≤120; bio?:string≤500KiB; preferences?:JSON object≤2KiB shallow-merge; photoURL and photoAssetId must be sent together, both null clears avatar；解析 schema self profile partial object。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>、<code>user</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 个人简介不能超过500KB / 偏好设置不能超过2KB / 头像 URL 与资源 ID 必须同时提交 / 头像地址不合法 / 头像资源 ID 不合法 / 本站头像必须提交拥有的媒体资源 ID / 清除头像时不能提交媒体资源 ID / 没有要更新的字段；HTTP 500: 更新用户资料失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：displayName 可选 string ≤50 字符；signature 可选 string ≤120 字符；bio 可选 string ≤512000 字符；preferences 可选 object；photoURL 可选 string ≤2048 字符；photoAssetId 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_users_me`。
+- 成功响应：HTTP 200：application/json <code>user</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500, default。HTTP 400: 个人简介不能超过500KB / 偏好设置不能超过2KB / 头像 URL 与资源 ID 必须同时提交 / 头像地址不合法 / 头像资源 ID 不合法 / 本站头像必须提交拥有的媒体资源 ID / 清除头像时不能提交媒体资源 ID / 没有要更新的字段；HTTP 500: 更新用户资料失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"signature":"API 更新签名"}' "$BASE_URL/api/users/me"
@@ -875,10 +761,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：删除/移除 users / account；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 注销账户失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_users_account`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 注销账户失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/users/account"
@@ -890,10 +775,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/users/account"
 
 - 用途：读取 users；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>users</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取用户列表失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_users`。
+- 成功响应：HTTP 200：application/json <code>users</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取用户列表失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/users"
@@ -905,10 +789,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/users"
 
 - 用途：部分更新 users / role；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：超级管理员。
-- 参数契约：path userId: required string path parameter；query 无 query 字段；body/multipart role required enum user|admin|super_admin; currentPassword?:string; required by handler when super_admin identity changes；validateBody schema adminUpdateUserRoleSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：由领域 transformer/helper 构造；包装/嵌套模型见第4章，不能假设统一 data。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403。HTTP 400/401/403 分支；触发条件见领域说明。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path userId 必填 string；query 无；application/json：role 必填 user|admin|super_admin；currentPassword 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_users_userId_role`。
+- 成功响应：HTTP 200：application/json <code>user</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400/401/403 分支；触发条件见领域说明。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"role":"user"}' "$BASE_URL/api/users/REPLACE_USERID/role"
@@ -920,10 +803,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：更新/执行 users / role；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：超级管理员。
-- 参数契约：path userId: required string path parameter；query 无 query 字段；body/multipart role required enum user|admin|super_admin; currentPassword?:string; required by handler when super_admin identity changes；validateBody schema adminUpdateUserRoleSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：由领域 transformer/helper 构造；包装/嵌套模型见第4章，不能假设统一 data。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403。HTTP 400/401/403 分支；触发条件见领域说明。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path userId 必填 string；query 无；application/json：role 必填 user|admin|super_admin；currentPassword 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_users_userId_role`。
+- 成功响应：HTTP 200：application/json <code>user</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400/401/403 分支；触发条件见领域说明。
 
 ```bash
 curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"role":"user"}' "$BASE_URL/api/users/REPLACE_USERID/role"
@@ -935,13 +817,12 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：部分更新 users；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：管理员。
-- 参数契约：path userId: required string path parameter；query 无 query 字段；body/multipart bio: optional string；displayName: optional string；email: optional string；emailVerified: optional boolean；newPassword: optional string；signature: optional string；validateBody schema adminUpdateUserSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>、<code>user</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 409: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toUserResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 409, 500。HTTP 400: 无效用户 / 不能编辑自己的资料；HTTP 403: 只能编辑普通用户；HTTP 404: 用户不存在；HTTP 409: 该邮箱已注册；HTTP 500: 更新用户资料失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path userId 必填 string；query 无；application/json：displayName 可选 string ≤50 字符；signature 可选 string ≤120 字符；bio 可选 string ≤512000 字符；email 可选 string；emailVerified 可选 boolean；newPassword 可选 string ≤128 字符。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_users_userId`。
+- 成功响应：HTTP 200：application/json <code>user</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 409, 429, 500, default。HTTP 400: 无效用户 / 不能编辑自己的资料；HTTP 403: 只能编辑普通用户；HTTP 404: 用户不存在；HTTP 409: 该邮箱已注册；HTTP 500: 更新用户资料失败。
 
 ```bash
-curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"bio":"REPLACE_BIO","displayName":"文档测试用户","email":"user@example.invalid","emailVerified":"REPLACE_EMAILVERIFIED","newPassword":"REPLACE_WITH_TEST_PASSWORD","signature":"REPLACE_SIGNATURE"}' "$BASE_URL/api/users/REPLACE_USERID"
+curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"bio":"REPLACE_BIO","displayName":"文档测试用户","email":"user@example.invalid","emailVerified":false,"newPassword":"REPLACE_WITH_TEST_PASSWORD","signature":"REPLACE_SIGNATURE"}' "$BASE_URL/api/users/REPLACE_USERID"
 ```
 
 <a id="api-put-api-users-userid-reset-password"></a>
@@ -950,10 +831,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：更新/执行 users / reset password；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：管理员。
-- 参数契约：path userId: required string path parameter；query 无 query 字段；body/multipart newPassword: required string；validateBody schema adminResetUserPasswordSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 无效用户 / 不能重置自己的密码；HTTP 403: 只能重置普通用户的密码；HTTP 404: 用户不存在；HTTP 500: 重置密码失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path userId 必填 string；query 无；application/json：newPassword 必填 string ≤128 字符。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_users_userId_reset_password`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 无效用户 / 不能重置自己的密码；HTTP 403: 只能重置普通用户的密码；HTTP 404: 用户不存在；HTTP 500: 重置密码失败。
 
 ```bash
 curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"newPassword":"REPLACE_WITH_TEST_PASSWORD"}' "$BASE_URL/api/users/REPLACE_USERID/reset-password"
@@ -965,10 +845,9 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：更新/执行 users / ban；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：管理员。
-- 参数契约：path userId: required string path parameter；query 无 query 字段；body/multipart note: optional string；reason: optional string。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>user</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toUserResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 无效用户 / 不能封禁自己 / 请输入封禁原因；HTTP 403: 只能封禁普通用户；HTTP 404: 用户不存在；HTTP 500: 封禁用户失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path userId 必填 string；query 无；application/json：note 可选 string；reason 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_users_userId_ban`。
+- 成功响应：HTTP 200：application/json <code>user</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 无效用户 / 不能封禁自己 / 请输入封禁原因；HTTP 403: 只能封禁普通用户；HTTP 404: 用户不存在；HTTP 500: 封禁用户失败。
 
 ```bash
 curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"note":"隔离测试操作","reason":"隔离测试操作"}' "$BASE_URL/api/users/REPLACE_USERID/ban"
@@ -980,10 +859,9 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：更新/执行 users / unban；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：管理员。
-- 参数契约：path userId: required string path parameter；query 无 query 字段；body/multipart note: optional string。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>user</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toUserResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 无效用户；HTTP 403: 只能解封普通用户；HTTP 404: 用户不存在；HTTP 500: 解封用户失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path userId 必填 string；query 无；application/json：note 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_users_userId_unban`。
+- 成功响应：HTTP 200：application/json <code>user</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 无效用户；HTTP 403: 只能解封普通用户；HTTP 404: 用户不存在；HTTP 500: 解封用户失败。
 
 ```bash
 curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"note":"隔离测试操作"}' "$BASE_URL/api/users/REPLACE_USERID/unban"
@@ -995,10 +873,9 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：读取 users / me / history；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query type?:wiki|post|music; page integer default1 min1; limit integer default20 clamp1–100；offset 不支持，传入返回 400；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>history</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: offset 参数不支持；HTTP 500: 获取历史记录失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query offset 可选 string；type 可选 string；page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_users_me_history`。
+- 成功响应：HTTP 200：application/json <code>history</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: offset 参数不支持；HTTP 500: 获取历史记录失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/users/me/history?type=wiki&page=1&limit=20"
@@ -1010,10 +887,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/users/me/history?type=wik
 
 - 用途：读取 users / mentions；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query q?:string; limit integer1–20 default8; empty q returns empty list；body/multipart 此处理器不读取 JSON body；解析 schema mention search query。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>users</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 500: 搜索用户失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query q 可选 string；limit 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_users_mentions`。
+- 成功响应：HTTP 200：application/json <code>users</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 搜索用户失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/users/mentions?q=%E7%A4%BA%E4%BE%8B&limit=8"
@@ -1025,10 +901,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/users/mentions?q=%E7%A4%B
 
 - 用途：读取 users / profile；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：公开/可选身份。
-- 参数契约：path userId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>user</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 404, 500。HTTP 404: 用户不存在；HTTP 500: 获取用户资料失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path userId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_users_userId_profile`。
+- 成功响应：HTTP 200：application/json <code>user</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 404: 用户不存在；HTTP 500: 获取用户资料失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/users/REPLACE_USERID/profile"
@@ -1040,10 +915,9 @@ curl --fail-with-body "$BASE_URL/api/users/REPLACE_USERID/profile"
 
 - 用途：读取 users / posts；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：公开/可选身份。
-- 参数契约：path userId: required string path parameter；query page/limit shared pagination; visibility?:literal public; default uses viewer permissions；body/multipart 此处理器不读取 JSON body；解析 schema user post visibility。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>posts</code>、<code>nested DTO fields</code>；HTTP 500: <code>error</code>；DTO transformer toPostResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 500: 获取用户帖子失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path userId 必填 string；query visibility 可选 string；page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_users_userId_posts`。
+- 成功响应：HTTP 200：application/json <code>posts</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 500: 获取用户帖子失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/users/REPLACE_USERID/posts?page=1&limit=20"
@@ -1055,10 +929,9 @@ curl --fail-with-body "$BASE_URL/api/users/REPLACE_USERID/posts?page=1&limit=20"
 
 - 用途：读取 users / galleries；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：公开/可选身份。
-- 参数契约：path userId: required string path parameter；query page/limit shared pagination; visibility?:literal public; default uses viewer permissions；body/multipart 此处理器不读取 JSON body；解析 schema user gallery visibility。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>galleries</code>、<code>nested DTO fields</code>；HTTP 500: <code>error</code>；DTO transformer toGalleryListResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 500: 获取用户图集失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path userId 必填 string；query visibility 可选 string；page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_users_userId_galleries`。
+- 成功响应：HTTP 200：application/json <code>galleries</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 500: 获取用户图集失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/users/REPLACE_USERID/galleries?page=1&limit=20"
@@ -1070,10 +943,9 @@ curl --fail-with-body "$BASE_URL/api/users/REPLACE_USERID/galleries?page=1&limit
 
 - 用途：读取 users / wiki；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：公开/可选身份。
-- 参数契约：path userId: required string path parameter；query limit: integer default 20 clamp 1–100 unless handler overrides；page: integer default 1 minimum 1；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>pages</code>、<code>nested DTO fields</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取用户百科失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path userId 必填 string；query page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_users_userId_wiki`。
+- 成功响应：HTTP 200：application/json <code>pages</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 500: 获取用户百科失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/users/REPLACE_USERID/wiki?limit=20&page=1"
@@ -1085,10 +957,9 @@ curl --fail-with-body "$BASE_URL/api/users/REPLACE_USERID/wiki?limit=20&page=1"
 
 - 用途：读取 users / comments；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：公开/可选身份。
-- 参数契约：path userId: required string path parameter；query limit: integer default 20 clamp 1–100 unless handler overrides；page: integer default 1 minimum 1；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>comments</code>、<code>nested DTO fields</code>；HTTP 500: <code>error</code>；DTO transformer toCommentResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取用户评论失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path userId 必填 string；query page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_users_userId_comments`。
+- 成功响应：HTTP 200：application/json <code>comments</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 500: 获取用户评论失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/users/REPLACE_USERID/comments?limit=20&page=1"
@@ -1100,10 +971,9 @@ curl --fail-with-body "$BASE_URL/api/users/REPLACE_USERID/comments?limit=20&page
 
 - 用途：读取 users / favorites；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：公开/可选身份。
-- 参数契约：path userId: required string path parameter；query page/limit shared pagination; visibility?:literal public; target user preference/ownership decides access；body/multipart 此处理器不读取 JSON body；解析 schema user favorites visibility。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>favorites</code>、<code>nested DTO fields</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 403, 500。HTTP 400: 无效收藏类型；HTTP 403: 无权查看该用户的收藏；HTTP 500: 获取用户收藏失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path userId 必填 string；query type 可选 string；page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_users_userId_favorites`。
+- 成功响应：HTTP 200：application/json <code>favorites</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 无效收藏类型；HTTP 403: 无权查看该用户的收藏；HTTP 500: 获取用户收藏失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/users/REPLACE_USERID/favorites?page=1&limit=20"
@@ -1115,10 +985,9 @@ curl --fail-with-body "$BASE_URL/api/users/REPLACE_USERID/favorites?page=1&limit
 
 - 用途：读取 users / history；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：公开/可选身份。
-- 参数契约：path userId: required string path parameter；query type?:wiki|post|music; page integer default1 min1; limit integer default20 clamp1–100；visibility controlled by viewer preference；body/multipart 此处理器不读取 JSON body；解析 schema user history visibility。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>history</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 403, 500。HTTP 400: 无效历史类型；HTTP 403: 无权查看该用户的浏览历史；HTTP 500: 获取用户浏览历史失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path userId 必填 string；query type 可选 string；page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_users_userId_history`。
+- 成功响应：HTTP 200：application/json <code>history</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 无效历史类型；HTTP 403: 无权查看该用户的浏览历史；HTTP 500: 获取用户浏览历史失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/users/REPLACE_USERID/history?type=wiki&page=1&limit=20"
@@ -1130,10 +999,9 @@ curl --fail-with-body "$BASE_URL/api/users/REPLACE_USERID/history?type=wiki&page
 
 - 用途：读取 users / likes；目标资源与完整业务约束见第 4 章「用户资料与账号」。
 - 权限：已认证。
-- 参数契约：path userId: required string path parameter；query limit integer default20 clamp1–100; page integer default1 min1；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>likes</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>；HTTP 403: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toPostResponse。可见性过滤可能使 likes 数量小于 limit；total 仍统计全部点赞记录。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 403: 无权查看该用户的点赞记录；HTTP 500: 获取用户点赞失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path userId 必填 string；query page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_users_userId_likes`。
+- 成功响应：HTTP 200：application/json <code>likes</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 403: 无权查看该用户的点赞记录；HTTP 500: 获取用户点赞失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/users/REPLACE_USERID/likes?limit=20&page=1"
@@ -1158,10 +1026,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/users/REPLACE_USERID/like
 
 - 用途：读取 sections；目标资源与完整业务约束见第 5 章「帖子与版块」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>sections</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取版块失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_sections`。
+- 成功响应：HTTP 200：application/json <code>sections</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取版块失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/sections"
@@ -1173,10 +1040,9 @@ curl --fail-with-body "$BASE_URL/api/sections"
 
 - 用途：创建/提交/触发 sections；目标资源与完整业务约束见第 5 章「帖子与版块」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart description: optional string；name: required string；order: optional number。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 201: <code>section</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：201, 400, 401, 403, 500。HTTP 400: 版块名称不能为空；HTTP 500: 新增版块失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：name 必填 string ≤80 字符；description 可选 string ≤500 字符；order 可选 number。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_sections`。
+- 成功响应：HTTP 201：application/json <code>section</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 429, 500。HTTP 400: 版块名称不能为空；HTTP 500: 新增版块失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"description":"文档测试说明","name":"文档测试名称","order":20}' "$BASE_URL/api/sections"
@@ -1188,10 +1054,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：删除/移除 sections；目标资源与完整业务约束见第 5 章「帖子与版块」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 404: 版块不存在；HTTP 500: 删除版块失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_sections_id`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 404: 版块不存在；HTTP 500: 删除版块失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/sections/REPLACE_ID"
@@ -1203,10 +1068,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/sections/REPLAC
 
 - 用途：读取 posts；目标资源与完整业务约束见第 5 章「帖子与版块」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query section:string(default all); page:integer(default1,min1); limit:integer(default20,clamp1–100); sort=latest|hot|recommended(default latest)；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from cached</code>、<code>posts</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 500: 获取帖子失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query section 可选 string；sort 可选 string；page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_posts`。
+- 成功响应：HTTP 200：application/json <code>posts</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取帖子失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/posts?section=all&page=1&limit=20&sort=latest"
@@ -1218,10 +1082,9 @@ curl --fail-with-body "$BASE_URL/api/posts?section=all&page=1&limit=20&sort=late
 
 - 用途：读取 posts / tags；目标资源与完整业务约束见第 5 章「帖子与版块」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>tags</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取帖子标签失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_posts_tags`。
+- 成功响应：HTTP 200：application/json <code>tags</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取帖子标签失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/posts/tags"
@@ -1233,10 +1096,9 @@ curl --fail-with-body "$BASE_URL/api/posts/tags"
 
 - 用途：创建/提交/触发 posts；目标资源与完整业务约束见第 5 章「帖子与版块」。
 - 权限：已认证且未封禁。限流器 postWriteLimiter。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart albumDocId: optional string；content: required string；locationCode: optional string；locationDetail: optional string；musicDocId: optional string；section: required string；status: optional ContentStatus；tags: optional string[]；title: required string；validateBody schema postCreateSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 201: <code>post</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toPostResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：201, 400, 401, 403, 500。HTTP 400: 缺少必要字段 / 版块不存在；HTTP 500: 音乐版块不存在，请先在后台创建 / 发布帖子失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：title 必填 string ≤200 字符；section 必填 string ≤80 字符；content 必填 string ≤512000 字符；tags 可选 string[]；status 可选 draft|pending|published；musicDocId 可选 string ≤100 字符；albumDocId 可选 string ≤120 字符；locationCode 可选 string|null；locationDetail 可选 string|null。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_posts`。
+- 成功响应：HTTP 201：application/json <code>post</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 429, 500。HTTP 400: 缺少必要字段 / 版块不存在；HTTP 500: 音乐版块不存在，请先在后台创建 / 发布帖子失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"albumDocId":"REPLACE_WITH_ALBUM_DOC_ID","content":"文档测试内容","locationCode":"REPLACE_LOCATIONCODE","locationDetail":"REPLACE_LOCATIONDETAIL","musicDocId":"REPLACE_MUSICDOCID","section":"REPLACE_WITH_SECTION_ID","status":"draft","tags":[],"title":"文档测试标题"}' "$BASE_URL/api/posts"
@@ -1248,10 +1110,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：读取 posts；目标资源与完整业务约束见第 5 章「帖子与版块」。
 - 权限：公开/可选身份。
-- 参数契约：path slug: required string path parameter；query includeDeleted?:string; only admin with literal true includes deleted comments; default false；body/multipart 此处理器不读取 JSON body；解析 schema post detail query。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>post</code>、<code>comments</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toPostResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 404, 500。HTTP 404: 帖子未找到；HTTP 500: 获取帖子详情失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query includeDeleted 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_posts_identifier`。
+- 成功响应：HTTP 200：application/json <code>post</code>、<code>comments</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 404: 帖子未找到；HTTP 500: 获取帖子详情失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/posts/REPLACE_SLUG?includeDeleted=false"
@@ -1263,10 +1124,9 @@ curl --fail-with-body "$BASE_URL/api/posts/REPLACE_SLUG?includeDeleted=false"
 
 - 用途：更新/执行 posts；目标资源与完整业务约束见第 5 章「帖子与版块」。
 - 权限：已认证且未封禁。限流器 postWriteLimiter。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart albumDocId: optional string；content: required string；locationCode: optional string；locationDetail: optional string；musicDocId: optional string；section: required string；status: optional ContentStatus；tags: optional string[]；title: required string；validateBody schema postUpdateSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>post</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toPostResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 缺少必要字段 / 版块不存在；HTTP 403: 无权编辑该帖子；HTTP 404: 帖子未找到；HTTP 500: 音乐版块不存在，请先在后台创建 / 编辑帖子失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：title 必填 string ≤200 字符；section 必填 string ≤80 字符；content 必填 string ≤512000 字符；tags 可选 string[]；status 可选 draft|pending|published；musicDocId 可选 string ≤100 字符；albumDocId 可选 string ≤120 字符；locationCode 可选 string|null；locationDetail 可选 string|null。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_posts_identifier`。
+- 成功响应：HTTP 200：application/json <code>post</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 缺少必要字段 / 版块不存在；HTTP 403: 无权编辑该帖子；HTTP 404: 帖子未找到；HTTP 500: 音乐版块不存在，请先在后台创建 / 编辑帖子失败。
 
 ```bash
 curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"albumDocId":"REPLACE_WITH_ALBUM_DOC_ID","content":"文档测试内容","locationCode":"REPLACE_LOCATIONCODE","locationDetail":"REPLACE_LOCATIONDETAIL","musicDocId":"REPLACE_MUSICDOCID","section":"REPLACE_WITH_SECTION_ID","status":"draft","tags":[],"title":"文档测试标题"}' "$BASE_URL/api/posts/REPLACE_ID"
@@ -1278,10 +1138,9 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：删除/移除 posts；目标资源与完整业务约束见第 5 章「帖子与版块」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart reason?:string≤1000; author may omit; deleting another owner requires nonempty reason；validateBody schema postDeleteSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 删除理由不能为空；HTTP 403: 无权删除该帖子；HTTP 404: 帖子未找到；HTTP 500: 删除帖子失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：reason 可选 string ≤1000 字符。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_posts_identifier`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 删除理由不能为空；HTTP 403: 无权删除该帖子；HTTP 404: 帖子未找到；HTTP 500: 删除帖子失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{}' "$BASE_URL/api/posts/REPLACE_ID"
@@ -1293,10 +1152,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/
 
 - 用途：创建/提交/触发 posts / like；目标资源与完整业务约束见第 5 章「帖子与版块」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>liked</code>、<code>likesCount</code>、<code>dislikesCount</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 帖子未找到；HTTP 500: 点赞失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_posts_id_like`。
+- 成功响应：HTTP 200：application/json <code>liked</code>、<code>likesCount</code>、<code>dislikesCount</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 帖子未找到；HTTP 500: 点赞失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/posts/REPLACE_ID/like"
@@ -1308,10 +1166,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/posts/REPLACE_ID/
 
 - 用途：删除/移除 posts / like；目标资源与完整业务约束见第 5 章「帖子与版块」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>liked</code>、<code>likesCount</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 帖子未找到；HTTP 500: 取消点赞失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_posts_id_like`。
+- 成功响应：HTTP 200：application/json <code>liked</code>、<code>likesCount</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 帖子未找到；HTTP 500: 取消点赞失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/posts/REPLACE_ID/like"
@@ -1323,10 +1180,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/posts/REPLACE_I
 
 - 用途：创建/提交/触发 posts / dislike；目标资源与完整业务约束见第 5 章「帖子与版块」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>disliked</code>、<code>dislikesCount</code>、<code>likesCount</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 帖子未找到；HTTP 500: 踩失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_posts_id_dislike`。
+- 成功响应：HTTP 200：application/json <code>disliked</code>、<code>dislikesCount</code>、<code>likesCount</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 帖子未找到；HTTP 500: 踩失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/posts/REPLACE_ID/dislike"
@@ -1338,10 +1194,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/posts/REPLACE_ID/
 
 - 用途：删除/移除 posts / dislike；目标资源与完整业务约束见第 5 章「帖子与版块」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>disliked</code>、<code>dislikesCount</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 帖子未找到；HTTP 500: 取消踩失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_posts_id_dislike`。
+- 成功响应：HTTP 200：application/json <code>disliked</code>、<code>dislikesCount</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 帖子未找到；HTTP 500: 取消踩失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/posts/REPLACE_ID/dislike"
@@ -1353,10 +1208,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/posts/REPLACE_I
 
 - 用途：创建/提交/触发 posts / pin；目标资源与完整业务约束见第 5 章「帖子与版块」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>isPinned</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 帖子未找到；HTTP 500: 置顶失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_posts_id_pin`。
+- 成功响应：HTTP 200：application/json <code>isPinned</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 帖子未找到；HTTP 500: 置顶失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/posts/REPLACE_ID/pin"
@@ -1368,10 +1222,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/posts/REPLACE_ID/
 
 - 用途：删除/移除 posts / pin；目标资源与完整业务约束见第 5 章「帖子与版块」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>isPinned</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 帖子未找到；HTTP 500: 取消置顶失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_posts_id_pin`。
+- 成功响应：HTTP 200：application/json <code>isPinned</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 帖子未找到；HTTP 500: 取消置顶失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/posts/REPLACE_ID/pin"
@@ -1426,10 +1279,9 @@ jq 用于从上一响应读取 ID 与构造安全 JSON。图库评论只需将 P
 
 - 用途：读取 posts / comments；目标资源与完整业务约束见第 6 章「评论」。
 - 权限：公开/可选身份。
-- 参数契约：path postId: required string path parameter；query page integer default1 min1; limit integer default20 clamp1–100; includeDeleted=true only for admin；body/multipart 此处理器不读取 JSON body；解析 schema post comments query。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>comments</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 404, 500。HTTP 404: 帖子未找到；HTTP 500: 获取评论失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path postId 必填 string；query includeDeleted 可选 string；page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_posts_postId_comments`。
+- 成功响应：HTTP 200：application/json <code>comments</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 404: 帖子未找到；HTTP 500: 获取评论失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/posts/REPLACE_POSTID/comments?page=1&limit=20"
@@ -1441,10 +1293,9 @@ curl --fail-with-body "$BASE_URL/api/posts/REPLACE_POSTID/comments?page=1&limit=
 
 - 用途：创建/提交/触发 posts / comments；目标资源与完整业务约束见第 6 章「评论」。
 - 权限：已认证且未封禁。限流器 postWriteLimiter。
-- 参数契约：path postId: required string path parameter；query 无 query 字段；body/multipart content: required string；parentId: optional string | null；validateBody schema postCommentSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 201: <code>comment</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toCommentResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：201, 400, 401, 403, 404, 500。HTTP 400: 评论内容不能为空 / 回复目标不存在；HTTP 403: 仅已发布内容可评论；HTTP 404: 帖子未找到；HTTP 500: 发表评论失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path postId 必填 string；query 无；application/json：content 必填 string ≤5000 字符；parentId 可选 string|null。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_posts_postId_comments`。
+- 成功响应：HTTP 201：application/json <code>comment</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 404, 429, 500。HTTP 400: 评论内容不能为空 / 回复目标不存在；HTTP 403: 仅已发布内容可评论；HTTP 404: 帖子未找到；HTTP 500: 发表评论失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"content":"文档测试内容","parentId":null}' "$BASE_URL/api/posts/REPLACE_POSTID/comments"
@@ -1456,10 +1307,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：删除/移除 posts / comments；目标资源与完整业务约束见第 6 章「评论」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart reason?:string≤1000; comment owner may omit; admin deleting another user requires reason；解析 schema comment delete reason。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 删除理由不能为空；HTTP 403: 无权删除该评论；HTTP 404: 评论未找到；HTTP 500: 删除评论失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：reason 必填 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_posts_comments_id`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 删除理由不能为空；HTTP 403: 无权删除该评论；HTTP 404: 评论未找到；HTTP 500: 删除评论失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{}' "$BASE_URL/api/posts/comments/REPLACE_ID"
@@ -1471,10 +1321,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/
 
 - 用途：创建/提交/触发 posts / comments / restore；目标资源与完整业务约束见第 6 章「评论」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 评论未找到；HTTP 500: 恢复评论失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_posts_comments_id_restore`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 评论未找到；HTTP 500: 恢复评论失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/posts/comments/REPLACE_ID/restore"
@@ -1486,10 +1335,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/posts/comments/RE
 
 - 用途：创建/提交/触发 posts / comments / like；目标资源与完整业务约束见第 6 章「评论」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from result</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 评论未找到；HTTP 500: 点赞失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_posts_comments_id_like`。
+- 成功响应：HTTP 200：application/json <code>null</code>、<code>liked</code>、<code>likedByMe</code>、<code>likesCount</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 评论未找到；HTTP 500: 点赞失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/posts/comments/REPLACE_ID/like"
@@ -1501,10 +1349,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/posts/comments/RE
 
 - 用途：删除/移除 posts / comments / like；目标资源与完整业务约束见第 6 章「评论」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from result</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 评论未找到；HTTP 500: 取消点赞失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_posts_comments_id_like`。
+- 成功响应：HTTP 200：application/json <code>null</code>、<code>liked</code>、<code>likedByMe</code>、<code>likesCount</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 评论未找到；HTTP 500: 取消点赞失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/posts/comments/REPLACE_ID/like"
@@ -1545,10 +1392,9 @@ Wiki 常规读取以公开数字 slug 定位；编辑、删除及评论类资源
 
 - 用途：读取 wiki；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query category string default all; tag?:string; page integer default1; pageSize integer default20 clamp1–100；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>pages</code>、<code>nested DTO fields</code>；HTTP 500: <code>error</code>；DTO transformer toWikiResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 500: 获取百科失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query category 可选 string；tag 可选 string；limit 可选 string；pageSize 可选 string；page 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_wiki`。
+- 成功响应：HTTP 200：application/json <code>pages</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取百科失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/wiki?category=all&page=1&pageSize=20"
@@ -1560,10 +1406,9 @@ curl --fail-with-body "$BASE_URL/api/wiki?category=all&page=1&pageSize=20"
 
 - 用途：读取 mp / wiki；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query category?:string; page integer default1; limit integer1–100 default20；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>items</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 500: 获取小程序百科失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query category 可选 string；page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_mp_wiki`。
+- 成功响应：HTTP 200：application/json <code>items</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取小程序百科失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/mp/wiki?page=1&limit=20"
@@ -1575,10 +1420,9 @@ curl --fail-with-body "$BASE_URL/api/mp/wiki?page=1&limit=20"
 
 - 用途：读取 wiki / recommended；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query slug?:numeric Wiki slug; limit integer default8 range1–24；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>items</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toWikiResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 404, 500。HTTP 404: 页面未找到；HTTP 500: 获取推荐百科失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query slug 可选 string；limit 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_wiki_recommended`。
+- 成功响应：HTTP 200：application/json <code>items</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 404: 页面未找到；HTTP 500: 获取推荐百科失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/wiki/recommended?limit=8"
@@ -1590,10 +1434,9 @@ curl --fail-with-body "$BASE_URL/api/wiki/recommended?limit=8"
 
 - 用途：读取 wiki / categories；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>categories</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取百科分类失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_wiki_categories`。
+- 成功响应：HTTP 200：application/json <code>categories</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取百科分类失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/wiki/categories"
@@ -1605,10 +1448,9 @@ curl --fail-with-body "$BASE_URL/api/wiki/categories"
 
 - 用途：读取 wiki / tags；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>tags</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200。无显式错误状态。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_wiki_tags`。
+- 成功响应：HTTP 200：application/json <code>tags</code>。
+- HTTP 状态/失败：200, 401, 429。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/wiki/tags"
@@ -1620,10 +1462,9 @@ curl --fail-with-body "$BASE_URL/api/wiki/tags"
 
 - 用途：读取 wiki；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：公开/可选身份。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from cached</code>、<code>page</code>、<code>backlinks</code>、<code>relations</code>、<code>relationGraph</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toWikiResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 404, 500。HTTP 404: 页面未找到；HTTP 500: 获取页面失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_wiki_slug`。
+- 成功响应：HTTP 200：application/json <code>page</code>、<code>backlinks</code>、<code>relations</code>、<code>relationGraph</code>。
+- HTTP 状态/失败：200, 400, 401, 404, 429, 500。HTTP 404: 页面未找到；HTTP 500: 获取页面失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/wiki/REPLACE_SLUG"
@@ -1635,10 +1476,9 @@ curl --fail-with-body "$BASE_URL/api/wiki/REPLACE_SLUG"
 
 - 用途：创建/提交/触发 wiki / like；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证且未封禁。限流器 wikiWriteLimiter。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>liked</code>、<code>likesCount</code>、<code>dislikesCount</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 页面未找到；HTTP 500: 点赞失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_wiki_slug_like`。
+- 成功响应：HTTP 200：application/json <code>liked</code>、<code>likesCount</code>、<code>dislikesCount</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 页面未找到；HTTP 500: 点赞失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/wiki/REPLACE_SLUG/like"
@@ -1650,10 +1490,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/wiki/REPLACE_SLUG
 
 - 用途：删除/移除 wiki / like；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证且未封禁。限流器 wikiWriteLimiter。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from result</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 取消点赞失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_wiki_slug_like`。
+- 成功响应：HTTP 200：application/json <code>liked</code>、<code>likesCount</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 500: 取消点赞失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/wiki/REPLACE_SLUG/like"
@@ -1665,10 +1504,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/wiki/REPLACE_SL
 
 - 用途：创建/提交/触发 wiki / dislike；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证且未封禁。限流器 wikiWriteLimiter。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>disliked</code>、<code>dislikesCount</code>、<code>likesCount</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 页面未找到；HTTP 500: 踩失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_wiki_slug_dislike`。
+- 成功响应：HTTP 200：application/json <code>disliked</code>、<code>dislikesCount</code>、<code>likesCount</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 页面未找到；HTTP 500: 踩失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/wiki/REPLACE_SLUG/dislike"
@@ -1680,10 +1518,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/wiki/REPLACE_SLUG
 
 - 用途：删除/移除 wiki / dislike；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证且未封禁。限流器 wikiWriteLimiter。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from result</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 取消踩失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_wiki_slug_dislike`。
+- 成功响应：HTTP 200：application/json <code>disliked</code>、<code>dislikesCount</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 500: 取消踩失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/wiki/REPLACE_SLUG/dislike"
@@ -1695,10 +1532,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/wiki/REPLACE_SL
 
 - 用途：创建/提交/触发 wiki / pin；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：管理员。限流器 wikiWriteLimiter。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：401, 403, 500。HTTP 500: 置顶操作失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_wiki_slug_pin`。
+- 成功响应：HTTP 200：application/json <code>isPinned</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 500: 置顶操作失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/wiki/REPLACE_SLUG/pin"
@@ -1710,10 +1546,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/wiki/REPLACE_SLUG
 
 - 用途：删除/移除 wiki / pin；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：管理员。限流器 wikiWriteLimiter。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：401, 403, 500。HTTP 500: 置顶操作失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_wiki_slug_pin`。
+- 成功响应：HTTP 200：application/json <code>isPinned</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 500: 置顶操作失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/wiki/REPLACE_SLUG/pin"
@@ -1725,10 +1560,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/wiki/REPLACE_SL
 
 - 用途：更新/执行 wiki / pin；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：管理员。限流器 wikiWriteLimiter。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart isPinned: optional boolean。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：401, 403, 500。HTTP 500: 置顶操作失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；application/json：isPinned 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_wiki_slug_pin`。
+- 成功响应：HTTP 200：application/json <code>isPinned</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 500: 置顶操作失败。
 
 ```bash
 curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"isPinned":"REPLACE_ISPINNED"}' "$BASE_URL/api/wiki/REPLACE_SLUG/pin"
@@ -1740,10 +1574,9 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：读取 wiki / history；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：公开/可选身份。
-- 参数契约：path slug: required string path parameter；query limit: integer default 20 clamp 1–100 unless handler overrides；page: integer default 1 minimum 1；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>revisions</code>、<code>nested DTO fields</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 404, 500。HTTP 404: 页面未找到；HTTP 500: 获取历史记录失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_wiki_slug_history`。
+- 成功响应：HTTP 200：application/json <code>revisions</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 404: 页面未找到；HTTP 500: 获取历史记录失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/wiki/REPLACE_SLUG/history?limit=20&page=1"
@@ -1755,10 +1588,9 @@ curl --fail-with-body "$BASE_URL/api/wiki/REPLACE_SLUG/history?limit=20&page=1"
 
 - 用途：读取 wiki / revisions；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：公开/可选身份。
-- 参数契约：path revisionId: required string path parameter；slug: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>revision</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 404, 500。HTTP 404: 页面未找到 / 修订版本未找到；HTTP 500: 获取修订版本失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；revisionId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_wiki_slug_revisions_revisionId`。
+- 成功响应：HTTP 200：application/json <code>revision</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 404: 页面未找到 / 修订版本未找到；HTTP 500: 获取修订版本失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/wiki/REPLACE_SLUG/revisions/REPLACE_REVISIONID"
@@ -1770,10 +1602,9 @@ curl --fail-with-body "$BASE_URL/api/wiki/REPLACE_SLUG/revisions/REPLACE_REVISIO
 
 - 用途：创建/提交/触发 wiki / submit；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证且未封禁。限流器 wikiWriteLimiter。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart note: optional string。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>、<code>page</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toWikiResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 403: 无权提交该页面；HTTP 404: 页面未找到；HTTP 500: 提交审核失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；application/json：note 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_wiki_slug_submit`。
+- 成功响应：HTTP 200：application/json <code>page</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500, default。HTTP 403: 无权提交该页面；HTTP 404: 页面未找到；HTTP 500: 提交审核失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"note":"隔离测试操作"}' "$BASE_URL/api/wiki/REPLACE_SLUG/submit"
@@ -1785,10 +1616,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 wiki；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证且未封禁。限流器 wikiWriteLimiter。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart title required≤200; content required≤500KiB; category required≤80; tags string[]≤30/element≤50; relations WikiRelation[]≤80; eventDate string≤32|null; locationCode≤64/locationDetail≤200; status draft|pending|published；validateBody schema wikiCreateSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>；HTTP 201: <code>page</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toWikiResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 201, 400, 401, 403, 500。HTTP 400: 缺少必要字段 / 内容超出限制，最大500KB；HTTP 500: 保存页面失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：title 必填 string ≤200 字符；content 必填 string ≤512000 字符；category 可选 string ≤80 字符；tags 可选 string[]；relations 可选 WikiRelationRecord[]；eventDate 可选 string ≤32 字符；locationCode 可选 string|null；locationDetail 可选 string|null；status 可选 draft|pending|published。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_wiki`。
+- 成功响应：HTTP 201：application/json <code>page</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 409, 429, 500, default。HTTP 400: 缺少必要字段 / 内容超出限制，最大500KB；HTTP 500: 保存页面失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"title":"隔离 Wiki 页","content":"隔离测试正文","category":"REPLACE_WITH_CATEGORY_ID","tags":[],"relations":[]}' "$BASE_URL/api/wiki"
@@ -1800,10 +1630,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：更新/执行 wiki；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证且未封禁。限流器 wikiWriteLimiter。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart partial schema fields but handler requires title/content/category; omitted update fields preserve existing; relations[] replaces relation snapshot; eventDate null clears；validateBody schema wikiUpdateSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>、<code>page</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toWikiResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 缺少必要字段 / 内容超出限制，最大500KB；HTTP 403: 无权编辑该页面；HTTP 404: 页面未找到；HTTP 500: 更新页面失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；application/json：title 必填 string ≤200 字符；content 必填 string ≤512000 字符；category 必填 string ≤80 字符；tags 可选 string[]；relations 可选 WikiRelationRecord[]；eventDate 可选 string ≤32 字符；locationCode 可选 string|null；locationDetail 可选 string|null；status 可选 draft|pending|published。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_wiki_slug`。
+- 成功响应：HTTP 200：application/json <code>page</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 409, 429, 500, default。HTTP 400: 缺少必要字段 / 内容超出限制，最大500KB；HTTP 403: 无权编辑该页面；HTTP 404: 页面未找到；HTTP 500: 更新页面失败。
 
 ```bash
 curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"title":"隔离 Wiki 页","content":"更新正文","category":"REPLACE_WITH_CATEGORY_ID","tags":[],"relations":[]}' "$BASE_URL/api/wiki/REPLACE_SLUG"
@@ -1815,10 +1644,9 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：删除/移除 wiki；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：管理员。限流器 wikiWriteLimiter。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart reason: required string；validateBody schema wikiDeleteSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 删除理由不能为空；HTTP 404: 页面未找到；HTTP 500: 删除页面失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；application/json：reason 可选 string ≤1000 字符。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_wiki_slug`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 删除理由不能为空；HTTP 404: 页面未找到；HTTP 500: 删除页面失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"reason":"隔离测试操作"}' "$BASE_URL/api/wiki/REPLACE_SLUG"
@@ -1830,10 +1658,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/
 
 - 用途：创建/提交/触发 wiki / branches；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证且未封禁。限流器 wikiWriteLimiter。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>、<code>branch</code>；HTTP 201: <code>branch</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toWikiBranchResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 201, 401, 403, 404, 500。HTTP 404: 页面未找到；HTTP 500: 创建分支失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_wiki_slug_branches`。
+- 成功响应：HTTP 200：application/json <code>branch</code>；HTTP 201：application/json <code>branch</code>。
+- HTTP 状态/失败：200, 201, 400, 401, 403, 404, 429, 500, default。HTTP 404: 页面未找到；HTTP 500: 创建分支失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/wiki/REPLACE_SLUG/branches"
@@ -1845,10 +1672,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/wiki/REPLACE_SLUG
 
 - 用途：读取 wiki / branches；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>branches</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toWikiBranchResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 页面未找到；HTTP 500: 获取分支失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_wiki_slug_branches`。
+- 成功响应：HTTP 200：application/json <code>branches</code>。
+- HTTP 状态/失败：200, 400, 401, 404, 429, 500。HTTP 404: 页面未找到；HTTP 500: 获取分支失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/wiki/REPLACE_SLUG/branches"
@@ -1860,10 +1686,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/wiki/REPLACE_SLUG/branche
 
 - 用途：读取 wiki / branches / mine；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>branches</code>；HTTP 500: <code>error</code>；DTO transformer toWikiBranchResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取分支失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_wiki_branches_mine`。
+- 成功响应：HTTP 200：application/json <code>branches</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取分支失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/wiki/branches/mine"
@@ -1875,10 +1700,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/wiki/branches/mine"
 
 - 用途：读取 wiki / branches；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证。
-- 参数契约：path branchId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>branch</code>、<code>latestRevision</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toWikiBranchResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 403: 无权访问该分支；HTTP 404: 分支未找到；HTTP 500: 获取分支失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path branchId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_wiki_branches_branchId`。
+- 成功响应：HTTP 200：application/json <code>branch</code>、<code>latestRevision</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 403: 无权访问该分支；HTTP 404: 分支未找到；HTTP 500: 获取分支失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/wiki/branches/REPLACE_BRANCHID"
@@ -1890,10 +1714,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/wiki/branches/REPLACE_BRA
 
 - 用途：读取 wiki / branches / revisions；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证。
-- 参数契约：path branchId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>revisions</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 403: 无权查看修订历史；HTTP 404: 分支未找到；HTTP 500: 获取分支版本失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path branchId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_wiki_branches_branchId_revisions`。
+- 成功响应：HTTP 200：application/json <code>revisions</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 403: 无权查看修订历史；HTTP 404: 分支未找到；HTTP 500: 获取分支版本失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/wiki/branches/REPLACE_BRANCHID/revisions"
@@ -1905,10 +1728,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/wiki/branches/REPLACE_BRA
 
 - 用途：创建/提交/触发 wiki / branches / revisions；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证且未封禁。限流器 wikiWriteLimiter。
-- 参数契约：path branchId: required string path parameter；query 无 query 字段；body/multipart title/content/category required; tags≤30, relations≤80, eventDate?:string|null, isAutoSave?:boolean；validateBody schema wikiRevisionSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>；HTTP 201: <code>revision</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 201, 400, 401, 403, 404, 500。HTTP 400: 缺少必要字段；HTTP 403: 无权编辑该分支；HTTP 404: 分支未找到；HTTP 500: 保存分支版本失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path branchId 必填 string；query 无；application/json：title 必填 string ≤200 字符；content 必填 string ≤512000 字符；category 必填 string ≤80 字符；tags 可选 string[]；relations 可选 WikiRelationRecord[]；eventDate 可选 string|null；isAutoSave 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_wiki_branches_branchId_revisions`。
+- 成功响应：HTTP 201：application/json <code>revision</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 404, 429, 500, default。HTTP 400: 缺少必要字段；HTTP 403: 无权编辑该分支；HTTP 404: 分支未找到；HTTP 500: 保存分支版本失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"title":"隔离修订","content":"正文","category":"REPLACE_WITH_CATEGORY_ID","tags":[],"relations":[]}' "$BASE_URL/api/wiki/branches/REPLACE_BRANCHID/revisions"
@@ -1920,10 +1742,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 wiki / branches / pull request；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证且未封禁。限流器 wikiWriteLimiter。
-- 参数契约：path branchId: required string path parameter；query 无 query 字段；body/multipart description: optional string；title: optional string。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>pullRequest</code>；HTTP 201: <code>pullRequest</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toWikiPullRequestResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 201, 400, 401, 403, 404, 500。HTTP 400: 分支暂无可提交内容 / 分支最新版本不存在；HTTP 403: 无权提交该分支；HTTP 404: 分支未找到；HTTP 500: 提交 PR 失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path branchId 必填 string；query 无；application/json：title 可选 string ≤200 字符；description 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_wiki_branches_branchId_pull_request`。
+- 成功响应：HTTP 200：application/json <code>pullRequest</code>；HTTP 201：application/json <code>pullRequest</code>。
+- HTTP 状态/失败：200, 201, 400, 401, 403, 404, 429, 500。HTTP 400: 分支暂无可提交内容 / 分支最新版本不存在；HTTP 403: 无权提交该分支；HTTP 404: 分支未找到；HTTP 500: 提交 PR 失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"description":"文档测试说明","title":"文档测试标题"}' "$BASE_URL/api/wiki/branches/REPLACE_BRANCHID/pull-request"
@@ -1935,10 +1756,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：读取 wiki / pull requests / list；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证。
-- 参数契约：path 无 path 字段；query status=open|merged|rejected default open; page integer default1; limit integer default20; pageSlug?:string; branchId?:string；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>pullRequests</code>、<code>nested DTO fields</code>；HTTP 500: <code>error</code>；DTO transformer toWikiPullRequestResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 500: 获取 PR 列表失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query status 可选 string；pageSlug 可选 string；branchId 可选 string；page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_wiki_pull_requests_list`。
+- 成功响应：HTTP 200：application/json <code>pullRequests</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取 PR 列表失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/wiki/pull-requests/list?status=open&page=1&limit=20"
@@ -1950,10 +1770,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/wiki/pull-requests/list?s
 
 - 用途：读取 wiki / pull requests；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证。
-- 参数契约：path prId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>pullRequest</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toWikiPullRequestResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 403: 无权查看该 PR；HTTP 404: PR 不存在；HTTP 500: 获取 PR 失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path prId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_wiki_pull_requests_prId`。
+- 成功响应：HTTP 200：application/json <code>pullRequest</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 403: 无权查看该 PR；HTTP 404: PR 不存在；HTTP 500: 获取 PR 失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/wiki/pull-requests/REPLACE_PRID"
@@ -1965,10 +1784,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/wiki/pull-requests/REPLAC
 
 - 用途：读取 wiki / pull requests / diff；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证。
-- 参数契约：path prId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>diff</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 403: 无权查看该 PR；HTTP 404: PR 不存在；HTTP 500: 获取 PR Diff 失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path prId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_wiki_pull_requests_prId_diff`。
+- 成功响应：HTTP 200：application/json <code>diff</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 403: 无权查看该 PR；HTTP 404: PR 不存在；HTTP 500: 获取 PR Diff 失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/wiki/pull-requests/REPLACE_PRID/diff"
@@ -1980,10 +1798,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/wiki/pull-requests/REPLAC
 
 - 用途：创建/提交/触发 wiki / pull requests / comments；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证且未封禁。限流器 wikiWriteLimiter。
-- 参数契约：path prId: required string path parameter；query 无 query 字段；body/multipart content: required string。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 201: <code>comment</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：201, 400, 401, 403, 404, 500。HTTP 400: 评论内容不能为空；HTTP 403: 无权评论该 PR；HTTP 404: PR 不存在；HTTP 500: 发表评论失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path prId 必填 string；query 无；application/json：content 必填 string ≤512000 字符。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_wiki_pull_requests_prId_comments`。
+- 成功响应：HTTP 201：application/json <code>comment</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 404, 429, 500。HTTP 400: 评论内容不能为空；HTTP 403: 无权评论该 PR；HTTP 404: PR 不存在；HTTP 500: 发表评论失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"content":"文档测试内容"}' "$BASE_URL/api/wiki/pull-requests/REPLACE_PRID/comments"
@@ -1995,10 +1812,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 wiki / pull requests / merge；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：管理员。限流器 wikiWriteLimiter。
-- 参数契约：path prId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>page</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 409: <code>error</code>、<code>conflictData</code>；HTTP 500: <code>error</code>；DTO transformer toWikiResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 409, 500。HTTP 400: 该 PR 已处理 / 分支没有可合并内容 / 分支版本不存在；HTTP 404: PR 不存在；HTTP 409: 检测到冲突，请先解决冲突后再合并；HTTP 500: 合并 PR 失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path prId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_wiki_pull_requests_prId_merge`。
+- 成功响应：HTTP 200：application/json <code>page</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 409, 429, 500。HTTP 400: 该 PR 已处理 / 分支没有可合并内容 / 分支版本不存在；HTTP 404: PR 不存在；HTTP 409: 检测到冲突，请先解决冲突后再合并；HTTP 500: 合并 PR 失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/wiki/pull-requests/REPLACE_PRID/merge"
@@ -2010,10 +1826,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/wiki/pull-request
 
 - 用途：创建/提交/触发 wiki / pull requests / reject；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：管理员。限流器 wikiWriteLimiter。
-- 参数契约：path prId: required string path parameter；query 无 query 字段；body/multipart note: optional string。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 该 PR 已处理；HTTP 404: PR 不存在；HTTP 500: 驳回 PR 失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path prId 必填 string；query 无；application/json：note 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_wiki_pull_requests_prId_reject`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 该 PR 已处理；HTTP 404: PR 不存在；HTTP 500: 驳回 PR 失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"note":"隔离测试操作"}' "$BASE_URL/api/wiki/pull-requests/REPLACE_PRID/reject"
@@ -2025,10 +1840,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 wiki / branches / resolve conflict；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证且未封禁。限流器 wikiWriteLimiter。
-- 参数契约：path branchId: required string path parameter；query 无 query 字段；body/multipart complete title/content/category revision snapshot; tags/relations included in snapshot; not a partial patch；validateBody schema wikiRevisionSchema.omit({ isAutoSave: true }。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>、<code>revision</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 缺少必要字段；HTTP 403: 无权解决该冲突；HTTP 404: 分支未找到 / 该分支没有待处理 PR；HTTP 500: 解决冲突失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path branchId 必填 string；query 无；application/json：title 可选 string ≤200 字符；content 可选 string ≤512000 字符；category 可选 string ≤80 字符；tags 可选 string[]；relations 可选 WikiRelationRecord[]；eventDate 可选 string|null。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_wiki_branches_branchId_resolve_conflict`。
+- 成功响应：HTTP 200：application/json <code>revision</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500, default。HTTP 400: 缺少必要字段；HTTP 403: 无权解决该冲突；HTTP 404: 分支未找到 / 该分支没有待处理 PR；HTTP 500: 解决冲突失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"title":"冲突解决快照","content":"正文","category":"REPLACE_WITH_CATEGORY_ID","tags":[],"relations":[]}' "$BASE_URL/api/wiki/branches/REPLACE_BRANCHID/resolve-conflict"
@@ -2040,10 +1854,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 wiki / rollback；目标资源与完整业务约束见第 7 章「Wiki 页面、分支与合并请求」。
 - 权限：已认证且未封禁。限流器 wikiWriteLimiter。
-- 参数契约：path revisionId: required string path parameter；slug: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>page</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toWikiResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 403: 无权回滚该页面；HTTP 404: 历史版本不存在 / 页面未找到；HTTP 500: 回滚失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；revisionId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_wiki_slug_rollback_revisionId`。
+- 成功响应：HTTP 200：application/json <code>page</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 409, 429, 500。HTTP 403: 无权回滚该页面；HTTP 404: 历史版本不存在 / 页面未找到；HTTP 500: 回滚失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/wiki/REPLACE_SLUG/rollback/REPLACE_REVISIONID"
@@ -2097,10 +1910,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" \
 
 - 用途：创建/提交/触发 uploads / sessions；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart maxFiles integer1–50 optional default50；解析 schema upload session create。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 201: <code>session</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toUploadSessionResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：201, 400, 401, 403, 500。HTTP 400: maxFiles 必须是 1 到 50 之间的整数；HTTP 500: 创建上传会话失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：maxFiles 可选 integer，最小 1，最大 50，默认 50。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_uploads_sessions`。
+- 成功响应：HTTP 201：application/json <code>session</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 429, 500。HTTP 400: maxFiles 必须是 1 到 50 之间的整数；HTTP 500: 创建上传会话失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"maxFiles":1}' "$BASE_URL/api/uploads/sessions"
@@ -2112,10 +1924,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：读取 uploads / sessions；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path sessionId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>session</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toUploadSessionResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 403: 无权访问该会话；HTTP 404: 上传会话不存在；HTTP 500: 获取上传会话失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path sessionId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_uploads_sessions_sessionId`。
+- 成功响应：HTTP 200：application/json <code>session</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 409, 429, 500。HTTP 403: 无权访问该会话；HTTP 404: 上传会话不存在；HTTP 500: 获取上传会话失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/uploads/sessions/REPLACE_SESSIONID"
@@ -2127,10 +1938,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/uploads/sessions/REPLACE_
 
 - 用途：创建/提交/触发 uploads / sessions / files；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。限流器 uploadLimiter。
-- 参数契约：path sessionId: required string path parameter；query multipart file required; tripleStorage?:boolean query default false; single file limit20MiB；body/multipart multipart file 必填；单文件最多20 MiB，支持格式见第8章；解析 schema upload file options。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>；HTTP 201: <code>session</code>、<code>asset</code>、<code>nested DTO fields</code>、<code>storageErrors</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toUploadSessionResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 201, 400, 401, 403, 404, 500。HTTP 400: 请上传文件；HTTP 404: 上传会话不存在；HTTP 500: 上传后处理失败，媒体资源已释放 / 上传文件失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path sessionId 必填 string；query tripleStorage 可选 string；multipart/form-data：file 必填 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_uploads_sessions_sessionId_files`。
+- 成功响应：HTTP 201：application/json <code>session</code>、<code>asset</code>、<code>tripleStorage</code>、<code>storageErrors</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 404, 409, 410, 413, 429, 500, default。HTTP 400: 请上传文件；HTTP 404: 上传会话不存在；HTTP 500: 上传后处理失败，媒体资源已释放 / 上传文件失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" -F 'file=@./test-fixture.png' "$BASE_URL/api/uploads/sessions/REPLACE_SESSIONID/files"
@@ -2142,10 +1952,9 @@ curl --fail-with-body -H "$AUTH_HEADER" -F 'file=@./test-fixture.png' "$BASE_URL
 
 - 用途：创建/提交/触发 uploads / sessions / finalize；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path sessionId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>session</code>、<code>error</code>；HTTP 500: <code>error</code>；DTO transformer toUploadSessionResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 完成上传会话失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path sessionId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_uploads_sessions_sessionId_finalize`。
+- 成功响应：HTTP 200：application/json <code>session</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 409, 410, 429, 500, default。HTTP 500: 完成上传会话失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/uploads/sessions/REPLACE_SESSIONID/finalize"
@@ -2157,10 +1966,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/uploads/sessions/
 
 - 用途：创建/提交/触发 uploads / assets / reuse；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart imageMapId/fileName/mimeType/sizeBytes required; imageMap must exist and be reusable；解析 schema reuse media asset。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>；HTTP 201: <code>asset</code>、<code>storageErrors</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 201, 400, 401, 403, 500。HTTP 400: 复用媒体资源参数不合法；HTTP 500: 复用媒体资源失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：imageMapId 必填 string；fileName 必填 string；mimeType 必填 image/jpeg|image/png|image/webp|image/gif|image/bmp；sizeBytes 必填 integer，最小 1，最大 20971520。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_uploads_assets_reuse`。
+- 成功响应：HTTP 201：application/json <code>asset</code>、<code>storageErrors</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 404, 409, 429, 500, default。HTTP 400: 复用媒体资源参数不合法；HTTP 500: 复用媒体资源失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"imageMapId":"REPLACE_WITH_IMAGE_MAP_ID","fileName":"image.png","mimeType":"image/png","sizeBytes":1}' "$BASE_URL/api/uploads/assets/reuse"
@@ -2172,10 +1980,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：删除/移除 uploads / assets；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path assetId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 释放媒体资源失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path assetId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_uploads_assets_assetId`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 409, 429, 500, default。HTTP 500: 释放媒体资源失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/uploads/assets/REPLACE_ASSETID"
@@ -2187,10 +1994,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/uploads/assets/
 
 - 用途：删除/移除 uploads / sessions；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path sessionId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 删除上传会话失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path sessionId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_uploads_sessions_sessionId`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 409, 429, 500, default。HTTP 500: 删除上传会话失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/uploads/sessions/REPLACE_SESSIONID"
@@ -2202,10 +2008,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/uploads/session
 
 - 用途：删除/移除 uploads / superbed；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart imageIds: required string[]。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>deletedCount</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 请提供要删除的图片 ID 列表 / 每次最多删除 1000 张图片 / Superbed API Token 未配置；HTTP 500: 删除图片失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：imageIds 必填 string[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_uploads_superbed`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>deletedCount</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 409, 429, 500。HTTP 400: 请提供要删除的图片 ID 列表 / 每次最多删除 1000 张图片 / Superbed API Token 未配置；HTTP 500: 删除图片失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"imageIds":["REPLACE_WITH_ID"]}' "$BASE_URL/api/uploads/superbed"
@@ -2217,10 +2022,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/
 
 - 用途：读取 galleries；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query limit: integer default 20 clamp 1–100 unless handler overrides；page: integer default 1 minimum 1；refreshThumbnails: optional boolean/string parser；body/multipart 此处理器不读取 body；数值/布尔解析 refreshThumbnails: boolean; default false。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from cached</code>、<code>galleries</code>、<code>nested DTO fields</code>；HTTP 500: <code>error</code>；DTO transformer toGalleryListResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取图集失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query refreshThumbnails 可选 string；page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_galleries`。
+- 成功响应：HTTP 200：application/json <code>galleries</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取图集失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/galleries?limit=20&page=1&refreshThumbnails=REPLACE_VALUE"
@@ -2232,10 +2036,9 @@ curl --fail-with-body "$BASE_URL/api/galleries?limit=20&page=1&refreshThumbnails
 
 - 用途：读取 galleries / tags；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>tags</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200。无显式错误状态。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_galleries_tags`。
+- 成功响应：HTTP 200：application/json <code>tags</code>。
+- HTTP 状态/失败：200, 401, 429。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/galleries/tags"
@@ -2247,10 +2050,9 @@ curl --fail-with-body "$BASE_URL/api/galleries/tags"
 
 - 用途：读取 galleries；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：公开/可选身份。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>gallery</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toGalleryResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 403, 404, 500。HTTP 403: 该图集尚未发布；HTTP 404: 图集不存在；HTTP 500: 获取图集详情失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_galleries_identifier`。
+- 成功响应：HTTP 200：application/json <code>gallery</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 403: 该图集尚未发布；HTTP 404: 图集不存在；HTTP 500: 获取图集详情失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/galleries/REPLACE_SLUG"
@@ -2262,10 +2064,9 @@ curl --fail-with-body "$BASE_URL/api/galleries/REPLACE_SLUG"
 
 - 用途：创建/提交/触发 galleries / like；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>liked</code>、<code>likesCount</code>、<code>dislikesCount</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 图集不存在；HTTP 500: 点赞失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_galleries_id_like`。
+- 成功响应：HTTP 200：application/json <code>liked</code>、<code>likesCount</code>、<code>dislikesCount</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 图集不存在；HTTP 500: 点赞失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/galleries/REPLACE_ID/like"
@@ -2277,10 +2078,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/galleries/REPLACE
 
 - 用途：删除/移除 galleries / like；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>liked</code>、<code>likesCount</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 图集不存在；HTTP 500: 取消点赞失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_galleries_id_like`。
+- 成功响应：HTTP 200：application/json <code>liked</code>、<code>likesCount</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 图集不存在；HTTP 500: 取消点赞失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/galleries/REPLACE_ID/like"
@@ -2292,10 +2092,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/galleries/REPLA
 
 - 用途：创建/提交/触发 galleries / dislike；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>disliked</code>、<code>dislikesCount</code>、<code>likesCount</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 图集不存在；HTTP 500: 踩失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_galleries_id_dislike`。
+- 成功响应：HTTP 200：application/json <code>disliked</code>、<code>dislikesCount</code>、<code>likesCount</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 图集不存在；HTTP 500: 踩失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/galleries/REPLACE_ID/dislike"
@@ -2307,10 +2106,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/galleries/REPLACE
 
 - 用途：删除/移除 galleries / dislike；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>disliked</code>、<code>dislikesCount</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 图集不存在；HTTP 500: 取消踩失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_galleries_id_dislike`。
+- 成功响应：HTTP 200：application/json <code>disliked</code>、<code>dislikesCount</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 图集不存在；HTTP 500: 取消踩失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/galleries/REPLACE_ID/dislike"
@@ -2322,10 +2120,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/galleries/REPLA
 
 - 用途：创建/提交/触发 galleries；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。限流器 galleryWriteLimiter。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart title/description/tags/eventDate/location/copyright/relatedLinks/status/published/uploadSessionId plus images or assetIds; requires at least one caller-owned ready image asset；解析 schema manual Gallery create。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>；HTTP 201: <code>gallery</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toGalleryResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 201, 400, 401, 403, 500。HTTP 400: 日期格式无效，请使用 yyyy-MM-dd 格式 / 图集至少需要一张图片 / 图片地址不合法，请重新上传 / 图片地址未关联当前用户的媒体资源，请重新上传 / 图片列表包含重复资源；HTTP 403: 当前图集已临时限制为仅管理员可操作；HTTP 500: 创建图集失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：title 可选 string ≤200 字符；description 可选 string ≤5000 字符；tags 可选 string[]；images 可选 object[]；assetIds 可选 string[]；uploadSessionId 可选 string；locationCode 可选 string ≤64 字符；locationDetail 可选 string ≤200 字符；copyright 可选 string ≤200 字符；eventDate 可选 string|null；relatedLinks 可选 object[]，默认 []。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_galleries`。
+- 成功响应：HTTP 201：application/json <code>gallery</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 429, 500, default。HTTP 400: 日期格式无效，请使用 yyyy-MM-dd 格式 / 图集至少需要一张图片 / 图片地址不合法，请重新上传 / 图片地址未关联当前用户的媒体资源，请重新上传 / 图片列表包含重复资源；HTTP 403: 当前图集已临时限制为仅管理员可操作；HTTP 500: 创建图集失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"title":"隔离图库","assetIds":["REPLACE_WITH_ASSET_ID"],"tags":[]}' "$BASE_URL/api/galleries"
@@ -2337,10 +2134,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：部分更新 galleries；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart only provided fields update; tags=[]/relatedLinks=[] clear; eventDate:null clears; images when sent is a full image snapshot; use owner/admin asset IDs；解析 schema manual Gallery partial update。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>gallery</code>、<code>error</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toGalleryResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 日期格式无效，请使用 yyyy-MM-dd 格式 / 图片保存数据无效 / 没有可更新的字段；HTTP 403: 当前图集已临时限制为仅管理员可操作 / 无权限编辑该图集；HTTP 404: 图集不存在；HTTP 500: 更新图集失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：title 可选 string ≤200 字符；description 可选 string ≤5000 字符；tags 可选 string[]；locationCode 可选 string ≤64 字符；locationDetail 可选 string ≤200 字符；copyright 可选 string ≤200 字符；eventDate 可选 string；relatedLinks 可选 object[]，默认 []；status 可选 string；published 可选 boolean；images 可选 object[]；uploadSessionId 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_galleries_identifier`。
+- 成功响应：HTTP 200：application/json <code>gallery</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500, default。HTTP 400: 日期格式无效，请使用 yyyy-MM-dd 格式 / 图片保存数据无效 / 没有可更新的字段；HTTP 403: 当前图集已临时限制为仅管理员可操作 / 无权限编辑该图集；HTTP 404: 图集不存在；HTTP 500: 更新图集失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"title":"更新图库标题"}' "$BASE_URL/api/galleries/REPLACE_ID"
@@ -2352,10 +2148,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：部分更新 galleries / publish；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart published: optional boolean/string parser。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>gallery</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toGalleryResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 403: 当前图集已临时限制为仅管理员可操作 / 无权限修改图集发布状态；HTTP 404: 图集不存在；HTTP 500: 修改图集发布状态失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：published 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_galleries_id_publish`。
+- 成功响应：HTTP 200：application/json <code>gallery</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 403: 当前图集已临时限制为仅管理员可操作 / 无权限修改图集发布状态；HTTP 404: 图集不存在；HTTP 500: 修改图集发布状态失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"published":true}' "$BASE_URL/api/galleries/REPLACE_ID/publish"
@@ -2367,10 +2162,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：创建/提交/触发 galleries / submit；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>gallery</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toGalleryResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 403: 当前图集已临时限制为仅管理员可操作 / 无权限提交该图集；HTTP 404: 图集不存在；HTTP 500: 提交审核失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_galleries_id_submit`。
+- 成功响应：HTTP 200：application/json <code>gallery</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 403: 当前图集已临时限制为仅管理员可操作 / 无权限提交该图集；HTTP 404: 图集不存在；HTTP 500: 提交审核失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/galleries/REPLACE_ID/submit"
@@ -2382,10 +2176,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/galleries/REPLACE
 
 - 用途：删除/移除 galleries；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart reason?:string max1000; required when admin deletes another owner’s gallery；validateBody schema galleryDeleteSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 删除理由不能为空；HTTP 403: 无权删除该图集；HTTP 404: 图集不存在；HTTP 500: 删除图集失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：reason 可选 string ≤1000 字符。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_galleries_identifier`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 删除理由不能为空；HTTP 403: 无权删除该图集；HTTP 404: 图集不存在；HTTP 500: 删除图集失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"reason":"隔离测试原因"}' "$BASE_URL/api/galleries/REPLACE_ID"
@@ -2397,10 +2190,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/
 
 - 用途：创建/提交/触发 galleries / images；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart assetIds nonempty array of caller-owned ready assets; optional uploadSessionId；解析 schema append gallery images。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>gallery</code>、<code>error</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toGalleryResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 请提供至少一个图片资源 / 图片列表包含重复资源；HTTP 403: 当前图集已临时限制为仅管理员可操作 / 无权限编辑该图集；HTTP 404: 图集不存在；HTTP 500: 追加图集图片失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：assetIds 必填 string[]；uploadSessionId 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_galleries_id_images`。
+- 成功响应：HTTP 200：application/json <code>gallery</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500, default。HTTP 400: 请提供至少一个图片资源 / 图片列表包含重复资源；HTTP 403: 当前图集已临时限制为仅管理员可操作 / 无权限编辑该图集；HTTP 404: 图集不存在；HTTP 500: 追加图集图片失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"assetIds":["REPLACE_WITH_ASSET_ID"]}' "$BASE_URL/api/galleries/REPLACE_ID/images"
@@ -2412,10 +2204,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：删除/移除 galleries / images；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart imageIds unique array1–200; gallery must retain at least one image；validateBody schema adminBatchGalleryImagesSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>deleted</code>、<code>gallery</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toGalleryResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 图片列表包含无效图片 / 图集至少需要保留一张图片；HTTP 403: 当前图集已临时限制为仅管理员可操作 / 无权限编辑该图集；HTTP 404: 图集不存在；HTTP 500: 批量删除图集图片失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：imageIds 必填 string[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_galleries_id_images`。
+- 成功响应：HTTP 200：application/json <code>deleted</code>、<code>gallery</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 图片列表包含无效图片 / 图集至少需要保留一张图片；HTTP 403: 当前图集已临时限制为仅管理员可操作 / 无权限编辑该图集；HTTP 404: 图集不存在；HTTP 500: 批量删除图集图片失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"imageIds":["REPLACE_WITH_IMAGE_ID"]}' "$BASE_URL/api/galleries/REPLACE_ID/images"
@@ -2427,10 +2218,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/
 
 - 用途：删除/移除 galleries / images；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；imageId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>gallery</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toGalleryResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 图集至少需要保留一张图片；HTTP 403: 当前图集已临时限制为仅管理员可操作 / 无权限编辑该图集；HTTP 404: 图集不存在 / 图片不存在；HTTP 500: 删除图集图片失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；imageId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_galleries_id_images_imageId`。
+- 成功响应：HTTP 200：application/json <code>gallery</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 图集至少需要保留一张图片；HTTP 403: 当前图集已临时限制为仅管理员可操作 / 无权限编辑该图集；HTTP 404: 图集不存在 / 图片不存在；HTTP 500: 删除图集图片失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/galleries/REPLACE_ID/images/REPLACE_IMAGEID"
@@ -2442,10 +2232,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/galleries/REPLA
 
 - 用途：部分更新 galleries / images / reorder；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart imageIds: required array（元素以 handler 检查为准）。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>gallery</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toGalleryResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 请提供图片排序列表 / 排序列表与当前图片数量不一致 / 排序列表包含无效图片；HTTP 403: 当前图集已临时限制为仅管理员可操作 / 无权限编辑该图集；HTTP 404: 图集不存在；HTTP 500: 重排图集图片失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：imageIds 必填 string[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_galleries_id_images_reorder`。
+- 成功响应：HTTP 200：application/json <code>gallery</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 请提供图片排序列表 / 排序列表与当前图片数量不一致 / 排序列表包含无效图片；HTTP 403: 当前图集已临时限制为仅管理员可操作 / 无权限编辑该图集；HTTP 404: 图集不存在；HTTP 500: 重排图集图片失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"imageIds":["REPLACE_WITH_ID"]}' "$BASE_URL/api/galleries/REPLACE_ID/images/reorder"
@@ -2457,10 +2246,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：读取 galleries / comments；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：公开/可选身份。
-- 参数契约：path id: required string path parameter；query no pagination; includeDeleted=true can be used only by admin for deleted entries；body/multipart 此处理器不读取 JSON body；解析 schema gallery comment list。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>comments</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 403, 404, 500。HTTP 403: 该图集尚未发布；HTTP 404: 图集不存在；HTTP 500: 获取图集评论失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query includeDeleted 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_galleries_id_comments`。
+- 成功响应：HTTP 200：application/json <code>comments</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 403: 该图集尚未发布；HTTP 404: 图集不存在；HTTP 500: 获取图集评论失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/galleries/REPLACE_ID/comments"
@@ -2472,10 +2260,9 @@ curl --fail-with-body "$BASE_URL/api/galleries/REPLACE_ID/comments"
 
 - 用途：创建/提交/触发 galleries / comments；目标资源与完整业务约束见第 8 章「图库与媒体上传」。
 - 权限：已认证且未封禁。限流器 galleryWriteLimiter。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart content: required string；parentId: optional string | null。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 201: <code>comment</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toCommentResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：201, 400, 401, 403, 404, 500。HTTP 400: 评论内容不能为空 / 回复目标不存在；HTTP 403: 仅已发布内容可评论；HTTP 404: 图集不存在；HTTP 500: 发表评论失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：content 必填 string；parentId 可选 string|null。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_galleries_id_comments`。
+- 成功响应：HTTP 201：application/json <code>comment</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 404, 429, 500。HTTP 400: 评论内容不能为空 / 回复目标不存在；HTTP 403: 仅已发布内容可评论；HTTP 404: 图集不存在；HTTP 500: 发表评论失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"content":"文档测试内容","parentId":null}' "$BASE_URL/api/galleries/REPLACE_ID/comments"
@@ -2574,10 +2361,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：读取 music；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query page integer default1; limit integer1–100 default20; tag?:string|string[]（重复同名参数）; tagMode=any|all default any; albumDocId?:business docId; includeInstrumentals:boolean default true; sortOrder=asc|desc default desc；body/multipart 此处理器不读取 JSON body；解析 schema query parameters；数值/布尔解析 limit: integer; default 20; range 1–100；page: integer; default 1；includeInstrumentals: boolean; default true。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from cached</code>、<code>songs</code>、<code>nested DTO fields</code>；HTTP 500: <code>error</code>；DTO transformer toSongResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 500: 获取音乐失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query albumDocId 可选 string；tag 可选 string；tagMode 可选 string；limit 可选 integer，默认 20；page 可选 integer，默认 1；includeInstrumentals 可选 string；sortOrder 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_music`。
+- 成功响应：HTTP 200：application/json <code>songs</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取音乐失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/music?page=1&limit=20&includeInstrumentals=true&sortOrder=desc"
@@ -2589,10 +2375,9 @@ curl --fail-with-body "$BASE_URL/api/music?page=1&limit=20&includeInstrumentals=
 
 - 用途：读取 music / tags；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>tags</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200。无显式错误状态。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_music_tags`。
+- 成功响应：HTTP 200：application/json <code>tags</code>。
+- HTTP 状态/失败：200, 401, 429。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/music/tags"
@@ -2604,10 +2389,9 @@ curl --fail-with-body "$BASE_URL/api/music/tags"
 
 - 用途：创建/提交/触发 music；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart title required≤200; artists nonempty string array; credits/tags/sources/customPlatformLinks optional; lyric≤500KiB; description≤5000; releaseDate YYYY-MM-DD|null; durationMs positive integer|null; playableOverride=auto|enabled|disabled；解析 schema create song。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 201: <code>song</code>、<code>duplicates</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toSongResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：201, 400, 401, 403, 500。HTTP 400: 播放状态无效 / 发行日期或时长格式无效 / 缺少歌曲信息；HTTP 500: 添加歌曲失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：title 必填 string ≤200 字符；artists 必填 string|string[]；lyricists 可选 string|string[]；composers 可选 string|string[]；arrangers 可选 string|string[]；vocals 可选 string|string[]；album 可选 string ≤200 字符；audioUrl 可选 string ≤2048 字符；lyric 可选 string|null；description 可选 string|null；releaseDate 可选 string|null；durationMs 可选 integer|null；playableOverride 可选 auto|enabled|disabled；displayAlbumMode 可选 linked|manual|none；manualAlbumName 可选 string ≤200 字符；coverAlbumDocId 可选 string|null；tags 可选 string|string[]；sources 可选 object[]；customPlatformLinks 可选 object[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_music`。
+- 成功响应：HTTP 201：application/json <code>song</code>、<code>duplicates</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 429, 500。HTTP 400: 播放状态无效 / 发行日期或时长格式无效 / 缺少歌曲信息；HTTP 500: 添加歌曲失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"title":"隔离歌曲","artists":["示例艺人"]}' "$BASE_URL/api/music"
@@ -2619,10 +2403,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 music / parse url；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart url: optional string。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>resource</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 请提供音乐链接 / 无法识别的音乐链接；HTTP 500: 解析音乐链接失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：url 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_music_parse_url`。
+- 成功响应：HTTP 200：application/json <code>resource</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 请提供音乐链接 / 无法识别的音乐链接；HTTP 500: 解析音乐链接失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"url":"https://example.invalid"}' "$BASE_URL/api/music/parse-url"
@@ -2634,10 +2417,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 music / import；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart duplicateStrategy: optional string；selectedSongIds: optional array（元素以 handler 检查为准）；url: optional string。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>summary</code>、<code>linked</code>、<code>linkedSongs</code>、<code>importedSongs</code>、<code>collection</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 请提供音乐链接 / 无法识别的音乐链接 / 没有可导入的歌曲；HTTP 500: 导入音乐失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：url 可选 string；duplicateStrategy 可选 string；selectedSongIds 可选 string[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_music_import`。
+- 成功响应：HTTP 200：application/json <code>summary</code>、<code>linked</code>、<code>linkedSongs</code>、<code>importedSongs</code>、<code>collection</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 请提供音乐链接 / 无法识别的音乐链接 / 没有可导入的歌曲；HTTP 500: 导入音乐失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"duplicateStrategy":"fill","selectedSongIds":["REPLACE_WITH_ID"],"url":"https://example.invalid"}' "$BASE_URL/api/music/import"
@@ -2649,10 +2431,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 music / from netease；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 410: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：401, 403, 410。HTTP 410: 请使用通用导入接口 /api/music/import。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_music_from_netease`。
+- 成功响应：接口当前停用，无成功响应。
+- HTTP 状态/失败：401, 403, 410, 429。HTTP 410: 请使用通用导入接口 /api/music/import。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/music/from-netease"
@@ -2664,10 +2445,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/music/from-neteas
 
 - 用途：创建/提交/触发 music / from qq；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 410: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：401, 403, 410。HTTP 410: 请使用通用导入接口 /api/music/import。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_music_from_qq`。
+- 成功响应：接口当前停用，无成功响应。
+- HTTP 状态/失败：401, 403, 410, 429。HTTP 410: 请使用通用导入接口 /api/music/import。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/music/from-qq"
@@ -2679,10 +2459,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/music/from-qq"
 
 - 用途：创建/提交/触发 music / from kugou；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 410: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：401, 403, 410。HTTP 410: 请使用通用导入接口 /api/music/import。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_music_from_kugou`。
+- 成功响应：接口当前停用，无成功响应。
+- HTTP 状态/失败：401, 403, 410, 429。HTTP 410: 请使用通用导入接口 /api/music/import。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/music/from-kugou"
@@ -2694,10 +2473,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/music/from-kugou"
 
 - 用途：创建/提交/触发 music / from baidu；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 410: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：401, 403, 410。HTTP 410: 请使用通用导入接口 /api/music/import。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_music_from_baidu`。
+- 成功响应：接口当前停用，无成功响应。
+- HTTP 状态/失败：401, 403, 410, 429。HTTP 410: 请使用通用导入接口 /api/music/import。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/music/from-baidu"
@@ -2709,10 +2487,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/music/from-baidu"
 
 - 用途：创建/提交/触发 music / from kuwo；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 410: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：401, 403, 410。HTTP 410: 请使用通用导入接口 /api/music/import。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_music_from_kuwo`。
+- 成功响应：接口当前停用，无成功响应。
+- HTTP 状态/失败：401, 403, 410, 429。HTTP 410: 请使用通用导入接口 /api/music/import。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/music/from-kuwo"
@@ -2724,10 +2501,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/music/from-kuwo"
 
 - 用途：读取 music / play url；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：公开/可选身份。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>playUrl</code>、<code>mode</code>、<code>platform</code>、<code>sourceId</code>、<code>playable</code>、<code>cached</code>、<code>cacheExpiresAt</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 404, 500。HTTP 404: 歌曲不存在；HTTP 500: 获取播放链接失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_music_docId_play_url`。
+- 成功响应：HTTP 200：application/json <code>playUrl</code>、<code>mode</code>、<code>platform</code>、<code>sourceId</code>、<code>playable</code>、<code>cached</code>、<code>cacheExpiresAt</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 404: 歌曲不存在；HTTP 500: 获取播放链接失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/music/REPLACE_DOCID/play-url"
@@ -2739,10 +2515,9 @@ curl --fail-with-body "$BASE_URL/api/music/REPLACE_DOCID/play-url"
 
 - 用途：读取 music / instrumental targets；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>docIds</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取伴奏列表失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_music_instrumental_targets`。
+- 成功响应：HTTP 200：application/json <code>docIds</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取伴奏列表失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/music/instrumental-targets"
@@ -2754,10 +2529,9 @@ curl --fail-with-body "$BASE_URL/api/music/instrumental-targets"
 
 - 用途：读取 music / match suggestions；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query platform:title source required; title required string; artists or artist string/list; max5 returned；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>suggestions</code>、<code>autoSelectedIndex</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 400: 缺少必要参数：platform, title, artists / 无效的平台；HTTP 500: 搜索匹配歌曲失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query platform 可选 string；title 可选 string；artists 可选 string；artist 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_music_match_suggestions`。
+- 成功响应：HTTP 200：application/json <code>suggestions</code>、<code>autoSelectedIndex</code>。
+- HTTP 状态/失败：200, 400, 401, 429, 500。HTTP 400: 缺少必要参数：platform, title, artists / 无效的平台；HTTP 500: 搜索匹配歌曲失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/music/match-suggestions?platform=netease&title=%E6%B5%8B%E8%AF%95%E6%AD%8C%E6%9B%B2&artists=%E7%A4%BA%E4%BE%8B%E8%89%BA%E4%BA%BA"
@@ -2769,10 +2543,9 @@ curl --fail-with-body "$BASE_URL/api/music/match-suggestions?platform=netease&ti
 
 - 用途：读取 music；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：公开/可选身份。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>song</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toSongResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 404, 500。HTTP 404: 歌曲不存在；HTTP 500: 获取歌曲详情失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_music_identifier`。
+- 成功响应：HTTP 200：application/json <code>song</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 404: 歌曲不存在；HTTP 500: 获取歌曲详情失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/music/REPLACE_SLUG"
@@ -2784,10 +2557,9 @@ curl --fail-with-body "$BASE_URL/api/music/REPLACE_SLUG"
 
 - 用途：删除/移除 music；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 歌曲不存在；HTTP 500: 删除歌曲失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_music_identifier`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 歌曲不存在；HTTP 500: 删除歌曲失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/music/REPLACE_DOCID"
@@ -2799,10 +2571,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/music/REPLACE_D
 
 - 用途：部分更新 music；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart only supplied fields update; text/list fields use song limits; playableOverride=auto|enabled|disabled; lyric/description/releaseDate/durationMs can be null to clear; sources/customPlatformLinks when supplied replace entire set；解析 schema partial song update。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>song</code>、<code>duplicates</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toSongResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 播放状态无效 / 发行日期格式无效 / 时长格式无效 / 请至少填写一位歌手 / 封面来源专辑不存在；HTTP 404: 歌曲不存在；HTTP 500: 更新歌曲失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；application/json：title 可选 string ≤200 字符；artists 可选 string|string[]；lyricists 可选 string|string[]；composers 可选 string|string[]；arrangers 可选 string|string[]；vocals 可选 string|string[]；album 可选 string ≤200 字符；audioUrl 可选 string ≤2048 字符；lyric 可选 string|null；description 可选 string|null；releaseDate 可选 string|null；durationMs 可选 integer|null；playableOverride 可选 auto|enabled|disabled；displayAlbumMode 可选 linked|manual|none；manualAlbumName 可选 string ≤200 字符；coverAlbumDocId 可选 string|null；tags 可选 string|string[]；sources 可选 object[]；customPlatformLinks 可选 object[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_music_identifier`。
+- 成功响应：HTTP 200：application/json <code>song</code>、<code>duplicates</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 播放状态无效 / 发行日期格式无效 / 时长格式无效 / 请至少填写一位歌手 / 封面来源专辑不存在；HTTP 404: 歌曲不存在；HTTP 500: 更新歌曲失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"title":"替换为歌曲标题"}' "$BASE_URL/api/music/REPLACE_DOCID"
@@ -2814,10 +2585,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：读取 music / covers；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：公开/可选身份。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>covers</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 404, 500。HTTP 404: 歌曲不存在；HTTP 500: 获取歌曲封面失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_music_docId_covers`。
+- 成功响应：HTTP 200：application/json <code>covers</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 404: 歌曲不存在；HTTP 500: 获取歌曲封面失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/music/REPLACE_DOCID/covers"
@@ -2829,10 +2599,9 @@ curl --fail-with-body "$BASE_URL/api/music/REPLACE_DOCID/covers"
 
 - 用途：创建/提交/触发 music / covers；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart assetId: required string；isDefault: optional boolean/string parser；数值/布尔解析 isDefault: boolean; default false。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>；HTTP 201: <code>cover</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 201, 400, 401, 403, 404, 500。HTTP 400: 缺少 assetId；HTTP 404: 歌曲不存在；HTTP 500: 添加歌曲封面失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；application/json：assetId 必填 string；isDefault 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_music_docId_covers`。
+- 成功响应：HTTP 201：application/json <code>cover</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 404, 429, 500, default。HTTP 400: 缺少 assetId；HTTP 404: 歌曲不存在；HTTP 500: 添加歌曲封面失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"assetId":"REPLACE_WITH_ASSET_ID","isDefault":true}' "$BASE_URL/api/music/REPLACE_DOCID/covers"
@@ -2844,10 +2613,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：删除/移除 music / covers；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart coverIds array1–200; trim/deduplicate, process each independently；validateBody schema adminBatchSongCoversSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>deleted</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 404: 歌曲不存在 / 封面不存在；HTTP 500: 批量删除歌曲封面失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；application/json：coverIds 必填 string[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_music_docId_covers`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>deleted</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 404: 歌曲不存在 / 封面不存在；HTTP 500: 批量删除歌曲封面失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"coverIds":["REPLACE_WITH_COVER_ID"]}' "$BASE_URL/api/music/REPLACE_DOCID/covers"
@@ -2859,10 +2627,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/
 
 - 用途：删除/移除 music / covers；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path coverId: required string path parameter；docId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 封面不存在；HTTP 500: 删除歌曲封面失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；coverId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_music_docId_covers_coverId`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 封面不存在；HTTP 500: 删除歌曲封面失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/music/REPLACE_DOCID/covers/REPLACE_COVERID"
@@ -2874,10 +2641,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/music/REPLACE_D
 
 - 用途：部分更新 music / covers / default；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path coverId: required string path parameter；docId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 封面不存在；HTTP 500: 设置默认封面失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；coverId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_music_docId_covers_coverId_default`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 封面不存在；HTTP 500: 设置默认封面失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" "$BASE_URL/api/music/REPLACE_DOCID/covers/REPLACE_COVERID/default"
@@ -2889,10 +2655,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" "$BASE_URL/api/music/REPLACE_DO
 
 - 用途：读取 music / albums；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：公开/可选身份。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>relations</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 404, 500。HTTP 404: 歌曲不存在；HTTP 500: 获取歌曲关联专辑失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_music_docId_albums`。
+- 成功响应：HTTP 200：application/json <code>relations</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 404: 歌曲不存在；HTTP 500: 获取歌曲关联专辑失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/music/REPLACE_DOCID/albums"
@@ -2904,10 +2669,9 @@ curl --fail-with-body "$BASE_URL/api/music/REPLACE_DOCID/albums"
 
 - 用途：创建/提交/触发 music / albums；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart albumDocId: required string；discNumber: optional integer（按 handler 范围/默认解析）；isDisplay: optional boolean/string parser；trackOrder: optional integer（按 handler 范围/默认解析）；数值/布尔解析 discNumber: integer; default 1; range 1–20；trackOrder: integer; default 0; range 0–5000；isDisplay: boolean; default false。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 201: <code>song</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 409: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toSongResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：201, 400, 401, 403, 404, 409, 500。HTTP 400: 缺少 albumDocId；HTTP 404: 歌曲或专辑不存在；HTTP 409: 歌曲已经关联此专辑；HTTP 500: 创建歌曲专辑关联失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；application/json：albumDocId 必填 string；discNumber 可选 integer；trackOrder 可选 integer；isDisplay 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_music_docId_albums`。
+- 成功响应：HTTP 201：application/json <code>song</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 404, 409, 429, 500。HTTP 400: 缺少 albumDocId；HTTP 404: 歌曲或专辑不存在；HTTP 409: 歌曲已经关联此专辑；HTTP 500: 创建歌曲专辑关联失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"albumDocId":"REPLACE_WITH_ALBUM_DOC_ID","discNumber":1,"isDisplay":true,"trackOrder":1}' "$BASE_URL/api/music/REPLACE_DOCID/albums"
@@ -2919,10 +2683,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：部分更新 music / albums；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path albumDocId: required string path parameter；docId: required string path parameter；query 无 query 字段；body/multipart discNumber: optional integer（按 handler 范围/默认解析）；isDisplay: optional boolean/string parser；trackOrder: optional integer（按 handler 范围/默认解析）；数值/布尔解析 discNumber: integer; default existing.discNumber; range 1–20,；trackOrder: integer; default existing.trackOrder; range 0–5000,。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>song</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toSongResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 关联不存在 / 歌曲或专辑不存在；HTTP 500: 更新歌曲专辑关联失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；albumDocId 必填 string；query 无；application/json：discNumber 可选 integer；trackOrder 可选 integer；isDisplay 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_music_docId_albums_albumDocId`。
+- 成功响应：HTTP 200：application/json <code>song</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 关联不存在 / 歌曲或专辑不存在；HTTP 500: 更新歌曲专辑关联失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"discNumber":1,"isDisplay":true,"trackOrder":1}' "$BASE_URL/api/music/REPLACE_DOCID/albums/REPLACE_ALBUMDOCID"
@@ -2934,10 +2697,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：删除/移除 music / albums；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path albumDocId: required string path parameter；docId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>song</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toSongResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 关联不存在 / 歌曲或专辑不存在；HTTP 500: 删除歌曲专辑关联失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；albumDocId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_music_docId_albums_albumDocId`。
+- 成功响应：HTTP 200：application/json <code>song</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 关联不存在 / 歌曲或专辑不存在；HTTP 500: 删除歌曲专辑关联失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/music/REPLACE_DOCID/albums/REPLACE_ALBUMDOCID"
@@ -2949,10 +2711,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/music/REPLACE_D
 
 - 用途：读取 music / instrumentals；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：公开/可选身份。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>instrumentals</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取歌曲伴奏失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_music_docId_instrumentals`。
+- 成功响应：HTTP 200：application/json <code>instrumentals</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取歌曲伴奏失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/music/REPLACE_DOCID/instrumentals"
@@ -2964,10 +2725,9 @@ curl --fail-with-body "$BASE_URL/api/music/REPLACE_DOCID/instrumentals"
 
 - 用途：读取 music / instrumental for；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：公开/可选身份。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>originals</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取歌曲原曲失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_music_docId_instrumental_for`。
+- 成功响应：HTTP 200：application/json <code>originals</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取歌曲原曲失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/music/REPLACE_DOCID/instrumental-for"
@@ -2979,10 +2739,9 @@ curl --fail-with-body "$BASE_URL/api/music/REPLACE_DOCID/instrumental-for"
 
 - 用途：创建/提交/触发 music / instrumentals；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart instrumentalSongDocId: required string。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 201: <code>relation</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 409: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：201, 400, 401, 403, 404, 409, 500。HTTP 400: 缺少 instrumentalSongDocId / 目标歌曲不是伴奏；HTTP 404: 歌曲不存在；HTTP 409: 该伴奏已关联；HTTP 500: 创建歌曲伴奏关联失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；application/json：instrumentalSongDocId 必填 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_music_docId_instrumentals`。
+- 成功响应：HTTP 201：application/json <code>relation</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 404, 409, 429, 500。HTTP 400: 缺少 instrumentalSongDocId / 目标歌曲不是伴奏；HTTP 404: 歌曲不存在；HTTP 409: 该伴奏已关联；HTTP 500: 创建歌曲伴奏关联失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"instrumentalSongDocId":"REPLACE_WITH_SONG_DOC_ID"}' "$BASE_URL/api/music/REPLACE_DOCID/instrumentals"
@@ -2994,10 +2753,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：删除/移除 music / instrumentals；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path docId: required string path parameter；instrumentalSongDocId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 关联不存在；HTTP 500: 删除歌曲伴奏关联失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；instrumentalSongDocId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_music_docId_instrumentals_instrumentalSongDocId`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 关联不存在；HTTP 500: 删除歌曲伴奏关联失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/music/REPLACE_DOCID/instrumentals/REPLACE_INSTRUMENTALSONGDOCID"
@@ -3009,10 +2767,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/music/REPLACE_D
 
 - 用途：部分更新 music / custom platforms；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：管理员。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart customPlatformLinks: optional Array<{label:string,url:http/https}>（无效项丢弃）。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>song</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toSongResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 歌曲不存在；HTTP 500: 更新自定义平台失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；application/json：customPlatformLinks 可选 object[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_music_docId_custom_platforms`。
+- 成功响应：HTTP 200：application/json <code>song</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 歌曲不存在；HTTP 500: 更新自定义平台失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"customPlatformLinks":[{"label":"平台","url":"https://example.invalid"}]}' "$BASE_URL/api/music/REPLACE_DOCID/custom-platforms"
@@ -3024,10 +2781,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：读取 music / posts；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：公开/可选身份。
-- 参数契约：path docId: required string path parameter；query limit integer1–100 default20; sort=latest|hot|recommended default latest；body/multipart 此处理器不读取 JSON body；解析 schema linked post query；数值/布尔解析 limit: integer; default 20; range 1–100。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>posts</code>；HTTP 500: <code>error</code>；DTO transformer toPostResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 500: 获取音乐关联帖子失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query limit 可选 integer，默认 20；sort 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_music_docId_posts`。
+- 成功响应：HTTP 200：application/json <code>posts</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取音乐关联帖子失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/music/REPLACE_DOCID/posts?limit=20&sort=latest"
@@ -3039,10 +2795,9 @@ curl --fail-with-body "$BASE_URL/api/music/REPLACE_DOCID/posts?limit=20&sort=lat
 
 - 用途：读取 music / song；目标资源与完整业务约束见第 9 章「音乐管理」。
 - 权限：公开/可选身份。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>nested DTO fields</code>、<code>playUrl</code>、<code>playMeta</code>、<code>docId</code>、<code>title</code>、<code>artists</code>、<code>album</code>、<code>description</code>、<code>releaseDate</code>、<code>durationMs</code>、<code>cover</code>、<code>audioUrl</code>、<code>sources</code>、<code>playable</code>、<code>customPlatformLinks</code>、<code>createdAt</code>、<code>updatedAt</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toSongResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 404, 500。HTTP 404: 未找到歌曲信息；HTTP 500: Failed to fetch song metadata。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_music_song_id`。
+- 成功响应：HTTP 200：application/json <code>docId</code>、<code>slug</code>、<code>title</code>、<code>artists</code>、<code>lyricists</code>、<code>composers</code>、<code>arrangers</code>、<code>vocals</code>、<code>album</code>、<code>tags</code>、<code>cover</code>、<code>coverThumbnail</code>、<code>audioUrl</code>、<code>releaseDate</code>、<code>durationMs</code>、<code>sources</code>、<code>playable</code>、<code>playableOverride</code>、<code>customPlatformLinks</code>、<code>displayAlbumMode</code>、<code>displayAlbum</code>、<code>manualAlbumName</code>、<code>coverId</code>、<code>coverAlbumDocId</code>、<code>covers</code>、<code>linkedAlbums</code>、<code>isInstrumental</code>、<code>favoritedByMe</code>、<code>createdAt</code>、<code>updatedAt</code>、<code>lyric</code>、<code>lyricType</code>、<code>lyricPlain</code>、<code>lyricSource</code>、<code>description</code>、<code>playUrl</code>、<code>playMeta</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 404: 未找到歌曲信息；HTTP 500: Failed to fetch song metadata。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/music/song/REPLACE_ID"
@@ -3059,7 +2814,7 @@ curl --fail-with-body "$BASE_URL/api/music/song/REPLACE_ID"
 - POST /:docId/sync-covers-to-songs：管理员；body songDocIds 可选。省略/空数组时同步该专辑所有已关联歌曲；非空则只同步命中的关联歌曲。专辑必须有可展示封面；返回 {success,syncedCount}。
 - POST /:docId/discs：管理员；body discNumber 可选（默认下一个可用碟号，1–20）、name 可选（默认 Disc N）；碟片不能重复，201 {disc}。
 - DELETE /:docId/discs/:discNumber：只能删除空碟片；含曲目时 400。
-- PATCH /:docId/tracks/reorder：管理员；body {tracks:[{disc,name,songs:[{songDocId,trackOrder}]}]}，最多 20 碟、每碟最多 5000 曲；disc 1–20 且唯一，name 非空且受长度限制；songDocId 非空且最多 191 字符；trackOrder 0–5000；歌曲不能跨碟重复。此为全量快照，必须包含专辑当前全部未删除关联歌曲，否则 400；成功 {success:true}。
+- PATCH /:docId/tracks/reorder：管理员；body {updatedAt,tracks:[{disc,name,songs:[{songDocId,trackOrder}]}]}，updatedAt 必须取当前专辑响应中的 ISO 8601 时间；最多 20 碟、每碟最多 5000 曲；disc 1–20 且唯一，name 非空且受长度限制；songDocId 非空且最多 191 字符；trackOrder 0–5000；歌曲不能跨碟重复。此为全量快照，会新增或移除曲目关系；包含不存在或已删除歌曲时返回 400，专辑版本已变化时返回 409；成功 {success:true}。
 - POST /:docId/sync-display-to-songs：管理员；可选 songDocIds；省略时全部设置为该专辑展示曲目，有值时仅更新已与此专辑关联的指定曲目；返回 {success,updated}。
 
 ```bash
@@ -3071,7 +2826,7 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 完整专辑入库流程：管理员创建歌曲 → 创建专辑 → 用两个响应的 docId 建关联 → GET /api/music/:docId/albums 确认关系 → 通过上传会话上传并 finalize → 用 asset.id 添加默认封面 → 从专辑详情或后台取得当前全部关联歌曲，构造 tracks 快照并调用 reorder。reorder 缺少当前歌曲会 400；不要把专辑内部 tracks JSON 当作局部 patch。
 
-### 逐接口契约（16 项）
+### 逐接口契约（17 项）
 
 <a id="api-get-api-albums"></a>
 
@@ -3079,13 +2834,26 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：读取 albums；目标资源与完整业务约束见第 10 章「专辑管理」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query platform?:string; tag?:string|string[]（重复同名参数）; tagMode=any|all default any; page integer default1; limit integer1–100 default20; sortOrder=asc|desc default desc；body/multipart 此处理器不读取 JSON body；解析 schema query parameters；数值/布尔解析 limit: integer; default 20; range 1–100；page: integer; default 1。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from cached</code>、<code>albums</code>、<code>nested DTO fields</code>；HTTP 500: <code>error</code>；DTO transformer toAlbumResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 500: 获取专辑失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query platform 可选 string；tag 可选 string；tagMode 可选 string；limit 可选 integer，默认 20；page 可选 integer，默认 1；sortOrder 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_albums`。
+- 成功响应：HTTP 200：application/json <code>albums</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取专辑失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/albums?page=1&limit=20&sortOrder=desc"
+```
+
+<a id="api-get-api-albums-tags"></a>
+
+### GET /api/albums/tags
+
+- 用途：读取 专辑与曲目。
+- 权限：公开，可选 Bearer 身份。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_albums_tags`。
+- 成功响应：HTTP 200：application/json <code>tags</code>。
+- HTTP 状态/失败：200, 401, 429。无效密钥返回 401，限流返回 429。
+
+```bash
+curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/albums/tags"
 ```
 
 <a id="api-get-api-albums-slug"></a>
@@ -3094,10 +2862,9 @@ curl --fail-with-body "$BASE_URL/api/albums?page=1&limit=20&sortOrder=desc"
 
 - 用途：读取 albums；目标资源与完整业务约束见第 10 章「专辑管理」。
 - 权限：公开/可选身份。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>album</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toSongResponse、toAlbumResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 404, 500。HTTP 404: 专辑不存在；HTTP 500: 获取专辑详情失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_albums_identifier`。
+- 成功响应：HTTP 200：application/json <code>album</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 404: 专辑不存在；HTTP 500: 获取专辑详情失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/albums/REPLACE_SLUG"
@@ -3109,10 +2876,9 @@ curl --fail-with-body "$BASE_URL/api/albums/REPLACE_SLUG"
 
 - 用途：读取 albums / posts；目标资源与完整业务约束见第 10 章「专辑管理」。
 - 权限：公开/可选身份。
-- 参数契约：path id: required string path parameter；query id in path is album docId; limit integer1–100 default20; sort=latest|hot|recommended default latest；body/multipart 此处理器不读取 JSON body；解析 schema linked post query；数值/布尔解析 limit: integer; default 20; range 1–100。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>posts</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toPostResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 404, 500。HTTP 404: 专辑不存在；HTTP 500: 获取专辑关联帖子失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query limit 可选 integer，默认 20；sort 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_albums_id_posts`。
+- 成功响应：HTTP 200：application/json <code>posts</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 404: 专辑不存在；HTTP 500: 获取专辑关联帖子失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/albums/REPLACE_ID/posts?limit=20&sort=latest"
@@ -3124,10 +2890,9 @@ curl --fail-with-body "$BASE_URL/api/albums/REPLACE_ID/posts?limit=20&sort=lates
 
 - 用途：创建/提交/触发 albums；目标资源与完整业务约束见第 10 章「专辑管理」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart title:string required≤200; artist:string required≤200; description?:string≤5000; releaseDate?:YYYY-MM-DD|null; tracks?:Array<{disc?:integer1–20,name?:string≤120,songs?:Array<{songDocId:business docId,trackOrder?:integer0–5000}>}>; sources?:external source list, replaced only when supplied；解析 schema album create parser。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 201: <code>album</code>、<code>duplicates</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toAlbumResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：201, 400, 401, 403, 500。HTTP 400: 发行日期格式无效 / 缺少专辑信息；HTTP 500: 创建专辑失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：title 必填 string ≤200 字符；artist 必填 string ≤200 字符；description 可选 string|null；releaseDate 可选 string|null；tracks 可选 TrackDiscPayload；tags 可选 string|string[]；sources 可选 object[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_albums`。
+- 成功响应：HTTP 201：application/json <code>album</code>、<code>duplicates</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 429, 500。HTTP 400: 发行日期格式无效 / 缺少专辑信息；HTTP 500: 创建专辑失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"title":"隔离专辑","artist":"示例艺人"}' "$BASE_URL/api/albums"
@@ -3139,10 +2904,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：部分更新 albums；目标资源与完整业务约束见第 10 章「专辑管理」。
 - 权限：管理员。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart title?/artist?:string≤200; description?:string|null≤5000; releaseDate?:YYYY-MM-DD|null; tracks?:complete normalized disc list; sources?:external source list, whole replacement when supplied; omitted fields unchanged；解析 schema album partial update parser。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>album</code>、<code>duplicates</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toAlbumResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 专辑标题不能为空 / 艺人不能为空 / 发行日期格式无效；HTTP 404: 专辑不存在；HTTP 500: 更新专辑失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；application/json：title 可选 string ≤200 字符；artist 可选 string ≤200 字符；description 可选 string|null；releaseDate 可选 string|null；tracks 可选 TrackDiscPayload；tags 可选 string|string[]；sources 可选 object[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_albums_identifier`。
+- 成功响应：HTTP 200：application/json <code>album</code>、<code>duplicates</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 专辑标题不能为空 / 艺人不能为空 / 发行日期格式无效；HTTP 404: 专辑不存在；HTTP 500: 更新专辑失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"title":"替换为专辑标题"}' "$BASE_URL/api/albums/REPLACE_DOCID"
@@ -3154,10 +2918,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：删除/移除 albums；目标资源与完整业务约束见第 10 章「专辑管理」。
 - 权限：管理员。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 专辑不存在；HTTP 500: 删除专辑失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_albums_identifier`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 专辑不存在；HTTP 500: 删除专辑失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/albums/REPLACE_DOCID"
@@ -3169,10 +2932,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/albums/REPLACE_
 
 - 用途：读取 albums / covers；目标资源与完整业务约束见第 10 章「专辑管理」。
 - 权限：公开/可选身份。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>covers</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 404, 500。HTTP 404: 专辑不存在；HTTP 500: 获取专辑封面失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_albums_docId_covers`。
+- 成功响应：HTTP 200：application/json <code>covers</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 404: 专辑不存在；HTTP 500: 获取专辑封面失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/albums/REPLACE_DOCID/covers"
@@ -3184,10 +2946,9 @@ curl --fail-with-body "$BASE_URL/api/albums/REPLACE_DOCID/covers"
 
 - 用途：创建/提交/触发 albums / covers；目标资源与完整业务约束见第 10 章「专辑管理」。
 - 权限：管理员。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart assetId: required string；isDefault: optional boolean/string parser；数值/布尔解析 isDefault: boolean; default false。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>；HTTP 201: <code>cover</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 201, 400, 401, 403, 404, 500。HTTP 400: 缺少 assetId；HTTP 404: 专辑不存在；HTTP 500: 添加专辑封面失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；application/json：assetId 必填 string；isDefault 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_albums_docId_covers`。
+- 成功响应：HTTP 201：application/json <code>cover</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 404, 429, 500, default。HTTP 400: 缺少 assetId；HTTP 404: 专辑不存在；HTTP 500: 添加专辑封面失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"assetId":"REPLACE_WITH_ASSET_ID","isDefault":true}' "$BASE_URL/api/albums/REPLACE_DOCID/covers"
@@ -3199,10 +2960,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：删除/移除 albums / covers；目标资源与完整业务约束见第 10 章「专辑管理」。
 - 权限：管理员。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart coverIds array1–200; trim/deduplicate, process each independently；validateBody schema adminBatchAlbumCoversSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>deleted</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 404: 专辑不存在 / 封面不存在；HTTP 500: 删除专辑封面失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；application/json：coverIds 必填 string[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_albums_docId_covers`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>deleted</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 404: 专辑不存在 / 封面不存在；HTTP 500: 删除专辑封面失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"coverIds":["REPLACE_WITH_COVER_ID"]}' "$BASE_URL/api/albums/REPLACE_DOCID/covers"
@@ -3214,10 +2974,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/
 
 - 用途：删除/移除 albums / covers；目标资源与完整业务约束见第 10 章「专辑管理」。
 - 权限：管理员。
-- 参数契约：path coverId: required string path parameter；docId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 专辑不存在 / 封面不存在；HTTP 500: 删除专辑封面失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；coverId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_albums_docId_covers_coverId`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 专辑不存在 / 封面不存在；HTTP 500: 删除专辑封面失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/albums/REPLACE_DOCID/covers/REPLACE_COVERID"
@@ -3229,10 +2988,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/albums/REPLACE_
 
 - 用途：部分更新 albums / covers / default；目标资源与完整业务约束见第 10 章「专辑管理」。
 - 权限：管理员。
-- 参数契约：path coverId: required string path parameter；docId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 404: 专辑不存在 / 封面不存在；HTTP 500: 设置默认封面失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；coverId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_albums_docId_covers_coverId_default`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 404: 专辑不存在 / 封面不存在；HTTP 500: 设置默认封面失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" "$BASE_URL/api/albums/REPLACE_DOCID/covers/REPLACE_COVERID/default"
@@ -3244,10 +3002,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" "$BASE_URL/api/albums/REPLACE_D
 
 - 用途：创建/提交/触发 albums / sync covers to songs；目标资源与完整业务约束见第 10 章「专辑管理」。
 - 权限：管理员。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart songDocIds: optional array（元素以 handler 检查为准）。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>syncedCount</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 专辑没有可同步的封面 / 没有可同步的歌曲；HTTP 404: 专辑不存在；HTTP 500: 同步专辑封面失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；application/json：songDocIds 可选 string[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_albums_docId_sync_covers_to_songs`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>syncedCount</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 专辑没有可同步的封面 / 没有可同步的歌曲；HTTP 404: 专辑不存在；HTTP 500: 同步专辑封面失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"songDocIds":["REPLACE_WITH_ID"]}' "$BASE_URL/api/albums/REPLACE_DOCID/sync-covers-to-songs"
@@ -3259,10 +3016,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 albums / discs；目标资源与完整业务约束见第 10 章「专辑管理」。
 - 权限：管理员。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart discNumber: optional integer（按 handler 范围/默认解析）；name: optional string；数值/布尔解析 discNumber: integer; default 0; range 1–20。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 201: <code>disc</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：201, 400, 401, 403, 404, 500。HTTP 400: Disc 已存在；HTTP 404: 专辑不存在；HTTP 500: 新增 Disc 失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；application/json：discNumber 可选 integer；name 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_albums_docId_discs`。
+- 成功响应：HTTP 201：application/json <code>disc</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 404, 429, 500。HTTP 400: Disc 已存在；HTTP 404: 专辑不存在；HTTP 500: 新增 Disc 失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"discNumber":1,"name":"文档测试名称"}' "$BASE_URL/api/albums/REPLACE_DOCID/discs"
@@ -3274,10 +3030,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：删除/移除 albums / discs；目标资源与完整业务约束见第 10 章「专辑管理」。
 - 权限：管理员。
-- 参数契约：path discNumber: required string path parameter；docId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: Disc 参数无效 / Disc 下仍有歌曲，无法删除；HTTP 404: 专辑不存在 / Disc 不存在；HTTP 500: 删除 Disc 失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；discNumber 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_albums_docId_discs_discNumber`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: Disc 参数无效 / Disc 下仍有歌曲，无法删除；HTTP 404: 专辑不存在 / Disc 不存在；HTTP 500: 删除 Disc 失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/albums/REPLACE_DOCID/discs/REPLACE_DISCNUMBER"
@@ -3289,13 +3044,12 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/albums/REPLACE_
 
 - 用途：部分更新 albums / tracks / reorder；目标资源与完整业务约束见第 10 章「专辑管理」。
 - 权限：管理员。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart tracks complete snapshot; ≤20 discs; disc1–20 unique; name≤120; songs≤5000; songDocId≤191, trackOrder0–5000; must include every current relation exactly once；validateBody schema adminAlbumTrackReorderSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 曲目快照必须包含专辑当前全部歌曲；HTTP 404: 专辑不存在；HTTP 500: 重排专辑曲目失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；application/json：updatedAt 必填 ISO 8601 string，取当前专辑响应；tracks 必填 object[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_albums_docId_tracks_reorder`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 409, 429, 500。HTTP 400: 曲目包含不存在或已删除的歌曲；HTTP 404: 专辑不存在；HTTP 409: 专辑已更新，请重新加载后再保存；HTTP 500: 重排专辑曲目失败。
 
 ```bash
-curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"tracks":[{"disc":1,"name":"Disc 1","songs":[{"songDocId":"REPLACE_WITH_SONG_DOC_ID","trackOrder":0}]}]}' "$BASE_URL/api/albums/REPLACE_DOCID/tracks/reorder"
+curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"updatedAt":"REPLACE_WITH_CURRENT_UPDATED_AT","tracks":[{"disc":1,"name":"Disc 1","songs":[{"songDocId":"REPLACE_WITH_SONG_DOC_ID","trackOrder":0}]}]}' "$BASE_URL/api/albums/REPLACE_DOCID/tracks/reorder"
 ```
 
 <a id="api-post-api-albums-docid-sync-display-to-songs"></a>
@@ -3304,10 +3058,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：创建/提交/触发 albums / sync display to songs；目标资源与完整业务约束见第 10 章「专辑管理」。
 - 权限：管理员。
-- 参数契约：path docId: required string path parameter；query 无 query 字段；body/multipart songDocIds: optional array（元素以 handler 检查为准）。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>updated</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 同步展示专辑失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path docId 必填 string；query 无；application/json：songDocIds 可选 string[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_albums_docId_sync_display_to_songs`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>updated</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 同步展示专辑失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"songDocIds":["REPLACE_WITH_ID"]}' "$BASE_URL/api/albums/REPLACE_DOCID/sync-display-to-songs"
@@ -3340,10 +3093,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：读取 ticket listings；目标资源与完整业务约束见第 11 章「活动与票务」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query type?:offer|request; eventId?:string internal event ID; q?:string; page:integer default1; limit:integer default20 clamp1–100；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from cached</code>、<code>listings</code>、<code>nested DTO fields</code>；HTTP 400: <code>error</code>；DTO transformer toTicketListingListResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400。HTTP 400: 无效的盘票类型。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query type 可选 string；q 可选 string；eventId 可选 string；page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_ticket_listings`。
+- 成功响应：HTTP 200：application/json <code>listings</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 400, 401, 429。HTTP 400: 无效的盘票类型。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/ticket-listings?type=offer&page=1&limit=20"
@@ -3355,10 +3107,9 @@ curl --fail-with-body "$BASE_URL/api/ticket-listings?type=offer&page=1&limit=20"
 
 - 用途：读取 ticket listings / events；目标资源与完整业务约束见第 11 章「活动与票务」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query q?:string; limit:integer 1–20 default20；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>events</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400。HTTP 400 分支；触发条件见领域说明。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query q 可选 string；limit 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_ticket_listings_events`。
+- 成功响应：HTTP 200：application/json <code>events</code>。
+- HTTP 状态/失败：200, 401, 429。HTTP 400 分支；触发条件见领域说明。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/ticket-listings/events?q=%E7%A4%BA%E4%BE%8B&limit=20"
@@ -3370,10 +3121,9 @@ curl --fail-with-body "$BASE_URL/api/ticket-listings/events?q=%E7%A4%BA%E4%BE%8B
 
 - 用途：读取 ticket listings / mine；目标资源与完整业务约束见第 11 章「活动与票务」。
 - 权限：已认证。
-- 参数契约：path 无 path 字段；query limit: integer default 20 clamp 1–100 unless handler overrides；page: integer default 1 minimum 1；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>listings</code>、<code>nested DTO fields</code>；DTO transformer toTicketListingListResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403。HTTP 401/403 分支；触发条件见领域说明。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_ticket_listings_mine`。
+- 成功响应：HTTP 200：application/json <code>listings</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 429。HTTP 401/403 分支；触发条件见领域说明。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/ticket-listings/mine?limit=20&page=1"
@@ -3385,10 +3135,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/ticket-listings/mine?limi
 
 - 用途：读取 ticket listings；目标资源与完整业务约束见第 11 章「活动与票务」。
 - 权限：公开/可选身份。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>listing</code>；HTTP 404: <code>error</code>；DTO transformer toTicketListingResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 404。HTTP 404: 盘票信息未找到。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_ticket_listings_identifier`。
+- 成功响应：HTTP 200：application/json <code>listing</code>。
+- HTTP 状态/失败：200, 401, 404, 429。HTTP 404: 盘票信息未找到。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/ticket-listings/REPLACE_SLUG"
@@ -3400,10 +3149,9 @@ curl --fail-with-body "$BASE_URL/api/ticket-listings/REPLACE_SLUG"
 
 - 用途：创建/提交/触发 ticket listings；目标资源与完整业务约束见第 11 章「活动与票务」。
 - 权限：已认证且未封禁。限流器 postWriteLimiter。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart strict；type=offer|request required；quantity integer1–10000；ticketTier required1–100 chars；contact required≤100KiB；seat optional≤200/default""；description optional≤500KiB/default""；eventId and customEventName exactly one；status=draft|pending|published optional；validateBody schema ticketListingWriteSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 201: <code>listing</code>；HTTP 400: <code>error</code>；DTO transformer toTicketListingResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：201, 400, 401, 403。HTTP 400: 关联活动不存在或已删除。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：type 必填 offer|request；quantity 必填 integer，最小 1，最大 10000；ticketTier 必填 string ≤100 字符；seat 可选 string ≤200 字符，默认 ""；description 可选 string ≤512000 字符，默认 ""；contact 必填 string ≤102400 字符；eventId 可选 string；customEventName 可选 string ≤200 字符；status 可选 draft|pending|published。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_ticket_listings`。
+- 成功响应：HTTP 201：application/json <code>listing</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 429。HTTP 400: 关联活动不存在或已删除。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"type":"offer","quantity":1,"ticketTier":"站票","contact":"隔离测试联系方式","customEventName":"隔离测试活动","status":"draft"}' "$BASE_URL/api/ticket-listings"
@@ -3415,10 +3163,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：更新/执行 ticket listings；目标资源与完整业务约束见第 11 章「活动与票务」。
 - 权限：已认证且未封禁。限流器 postWriteLimiter。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart strict；type=offer|request required；quantity integer1–10000；ticketTier required1–100 chars；contact required≤100KiB；seat optional≤200/default""；description optional≤500KiB/default""；eventId and customEventName exactly one；status=draft|pending|published optional；validateBody schema ticketListingWriteSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>listing</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；DTO transformer toTicketListingResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404。HTTP 400: 关联活动不存在或已删除；HTTP 403: 无权编辑该盘票信息；HTTP 404: 盘票信息未找到。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：type 必填 offer|request；quantity 必填 integer，最小 1，最大 10000；ticketTier 必填 string ≤100 字符；seat 可选 string ≤200 字符，默认 ""；description 可选 string ≤512000 字符，默认 ""；contact 必填 string ≤102400 字符；eventId 可选 string；customEventName 可选 string ≤200 字符；status 可选 draft|pending|published。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_ticket_listings_identifier`。
+- 成功响应：HTTP 200：application/json <code>listing</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429。HTTP 400: 关联活动不存在或已删除；HTTP 403: 无权编辑该盘票信息；HTTP 404: 盘票信息未找到。
 
 ```bash
 curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"type":"offer","quantity":1,"ticketTier":"站票","contact":"隔离测试联系方式","customEventName":"隔离测试活动","status":"draft"}' "$BASE_URL/api/ticket-listings/REPLACE_ID"
@@ -3430,10 +3177,9 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：删除/移除 ticket listings；目标资源与完整业务约束见第 11 章「活动与票务」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart reason?:string; owner can omit, deleting another owner requires reason；validateBody schema postDeleteSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404。HTTP 400: 删除理由不能为空；HTTP 403: 无权删除该盘票信息；HTTP 404: 盘票信息未找到。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：reason 可选 string ≤1000 字符。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_ticket_listings_identifier`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429。HTTP 400: 删除理由不能为空；HTTP 403: 无权删除该盘票信息；HTTP 404: 盘票信息未找到。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"reason":"隔离测试原因"}' "$BASE_URL/api/ticket-listings/REPLACE_ID"
@@ -3445,10 +3191,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/
 
 - 用途：读取 events；目标资源与完整业务约束见第 11 章「活动与票务」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query tag?:string|string[]（重复同名参数）; tagMode=any|all default any; sortOrder=asc|upcoming|desc default desc; page integer default1; limit integer default20 clamp1–100；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>events</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>；HTTP 400: <code>error</code>；DTO transformer toEventListResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400。HTTP 400 分支；触发条件见领域说明。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query tag 可选 string；tagMode 可选 string；sortOrder 可选 string；page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_events`。
+- 成功响应：HTTP 200：application/json <code>events</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 400, 401, 429。HTTP 400 分支；触发条件见领域说明。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/events?sortOrder=upcoming&page=1&limit=20"
@@ -3460,10 +3205,9 @@ curl --fail-with-body "$BASE_URL/api/events?sortOrder=upcoming&page=1&limit=20"
 
 - 用途：读取 events / tags；目标资源与完整业务约束见第 11 章「活动与票务」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>tags</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200。无显式错误状态。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_events_tags`。
+- 成功响应：HTTP 200：application/json <code>tags</code>。
+- HTTP 状态/失败：200, 401, 429。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/events/tags"
@@ -3475,10 +3219,9 @@ curl --fail-with-body "$BASE_URL/api/events/tags"
 
 - 用途：读取 events；目标资源与完整业务约束见第 11 章「活动与票务」。
 - 权限：公开/可选身份。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>event</code>；HTTP 404: <code>error</code>；DTO transformer toEventResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 404。HTTP 404: 活动不存在。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_events_identifier`。
+- 成功响应：HTTP 200：application/json <code>event</code>。
+- HTTP 状态/失败：200, 401, 404, 429。HTTP 404: 活动不存在。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/events/REPLACE_SLUG"
@@ -3490,10 +3233,9 @@ curl --fail-with-body "$BASE_URL/api/events/REPLACE_SLUG"
 
 - 用途：创建/提交/触发 events；目标资源与完整业务约束见第 11 章「活动与票务」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart title:string required trim max200; location:string max200 default""; content:string max500KiB default""; timeSlots array≤30 of {type:date|datetime,start:YYYY-MM-DD[THH:mm],end?}; timeStatus=pending|postponed|null default null; ticketPrices≤30 of {description?,price finite≥0}; saleTimes≤30 of {time:YYYY-MM-DDTHH:mm,note?}; lineup≤50 strings max100; tags≤30 strings max50 dedup; links≤20(label≤80); coverAssetId?:string|null; uploadSessionId?:string; posters array defaults[]；validateBody schema eventWriteSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>；HTTP 201: <code>event</code>；DTO transformer toEventResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 201, 400, 401, 403。HTTP 400/401/403 分支；触发条件见领域说明。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：title 必填 string ≤200 字符；location 可选 string ≤200 字符，默认 ""；content 可选 string ≤512000 字符，默认 ""；timeSlots 可选 object[]，默认 []；timeStatus 可选 pending|postponed|null，默认 null；ticketPrices 可选 object[]；saleTimes 可选 object[]；lineup 可选 string[]，默认 []；tags 可选 string[]；externalLinks 可选 object[]，默认 []；relatedLinks 可选 object[]，默认 []；coverAssetId 可选 string|null；uploadSessionId 可选 string；posters 可选 object|object[]，默认 []。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_events`。
+- 成功响应：HTTP 201：application/json <code>event</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 429, default。HTTP 400/401/403 分支；触发条件见领域说明。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"title":"隔离测试活动","timeSlots":[{"type":"date","start":"2030-01-01"}]}' "$BASE_URL/api/events"
@@ -3505,10 +3247,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：更新/执行 events；目标资源与完整业务约束见第 11 章「活动与票务」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart title:string required trim max200; location:string max200 default""; content:string max500KiB default""; timeSlots array≤30 of {type:date|datetime,start:YYYY-MM-DD[THH:mm],end?}; timeStatus=pending|postponed|null default null; ticketPrices≤30 of {description?,price finite≥0}; saleTimes≤30 of {time:YYYY-MM-DDTHH:mm,note?}; lineup≤50 strings max100; tags≤30 strings max50 dedup; links≤20(label≤80); coverAssetId?:string|null; uploadSessionId?:string; posters array defaults[]；validateBody schema eventWriteSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>event</code>、<code>error</code>；HTTP 404: <code>error</code>；DTO transformer toEventResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404。HTTP 404: 活动不存在。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：title 必填 string ≤200 字符；location 可选 string ≤200 字符，默认 ""；content 可选 string ≤512000 字符，默认 ""；timeSlots 可选 object[]，默认 []；timeStatus 可选 pending|postponed|null，默认 null；ticketPrices 可选 object[]；saleTimes 可选 object[]；lineup 可选 string[]，默认 []；tags 可选 string[]；externalLinks 可选 object[]，默认 []；relatedLinks 可选 object[]，默认 []；coverAssetId 可选 string|null；uploadSessionId 可选 string；posters 可选 object|object[]，默认 []。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_events_identifier`。
+- 成功响应：HTTP 200：application/json <code>event</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, default。HTTP 404: 活动不存在。
 
 ```bash
 curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"title":"隔离测试活动","timeSlots":[{"type":"date","start":"2030-01-01"}]}' "$BASE_URL/api/events/REPLACE_ID"
@@ -3520,10 +3261,9 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：删除/移除 events；目标资源与完整业务约束见第 11 章「活动与票务」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 404: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404。HTTP 404: 活动不存在。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_events_identifier`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429。HTTP 404: 活动不存在。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/events/REPLACE_ID"
@@ -3535,10 +3275,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/events/REPLACE_
 
 - 用途：创建/提交/触发 events / restore；目标资源与完整业务约束见第 11 章「活动与票务」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>event</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；DTO transformer toEventResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404。HTTP 400: 该记录未被删除；HTTP 404: 活动不存在。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_events_id_restore`。
+- 成功响应：HTTP 200：application/json <code>event</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429。HTTP 400: 该记录未被删除；HTTP 404: 活动不存在。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/events/REPLACE_ID/restore"
@@ -3550,10 +3289,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/events/REPLACE_ID
 
 - 用途：删除/移除 events / permanent；目标资源与完整业务约束见第 11 章「活动与票务」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 404: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404。HTTP 404: 活动不存在。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_events_id_permanent`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429。HTTP 404: 活动不存在。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/events/REPLACE_ID/permanent"
@@ -3578,10 +3316,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/events/REPLACE_
 
 - 用途：读取 notifications；目标资源与完整业务约束见第 12 章「收藏、通知与公告」。
 - 权限：已认证。
-- 参数契约：path 无 path 字段；query page integer default1; limit handler pagination; unread?:boolean query string; type?:string notification kind；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>notifications</code>、<code>unreadCount</code>、<code>nested DTO fields</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 500: 获取通知失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query unread 可选 string；type 可选 string；page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_notifications`。
+- 成功响应：HTTP 200：application/json <code>notifications</code>、<code>unreadCount</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取通知失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/notifications?page=1&limit=20"
@@ -3593,10 +3330,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/notifications?page=1&limi
 
 - 用途：创建/提交/触发 notifications / read；目标资源与完整业务约束见第 12 章「收藏、通知与公告」。
 - 权限：已认证。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 403: 无权操作该通知；HTTP 404: 通知不存在；HTTP 500: 标记已读失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_notifications_id_read`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 403: 无权操作该通知；HTTP 404: 通知不存在；HTTP 500: 标记已读失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/notifications/REPLACE_ID/read"
@@ -3608,10 +3344,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/notifications/REP
 
 - 用途：创建/提交/触发 notifications / read all；目标资源与完整业务约束见第 12 章「收藏、通知与公告」。
 - 权限：已认证。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 全部标记已读失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_notifications_read_all`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 全部标记已读失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/notifications/read-all"
@@ -3623,10 +3358,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/notifications/rea
 
 - 用途：删除/移除 notifications；目标资源与完整业务约束见第 12 章「收藏、通知与公告」。
 - 权限：已认证。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404, 500。HTTP 403: 无权操作该通知；HTTP 404: 通知不存在；HTTP 500: 删除通知失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_notifications_id`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429, 500。HTTP 403: 无权操作该通知；HTTP 404: 通知不存在；HTTP 500: 删除通知失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/notifications/REPLACE_ID"
@@ -3638,10 +3372,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/notifications/R
 
 - 用途：读取 favorites；目标资源与完整业务约束见第 12 章「收藏、通知与公告」。
 - 权限：已认证。
-- 参数契约：path 无 path 字段；query type?:wiki|post|music|gallery; omitted reads all types; each target is visibility-filtered；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>favorites</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toWikiResponse、toPostResponse、toGalleryResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 无效收藏类型；HTTP 500: 获取收藏列表失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query type 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_favorites`。
+- 成功响应：HTTP 200：application/json <code>favorites</code>。
+- HTTP 状态/失败：200, 400, 401, 429, 500。HTTP 400: 无效收藏类型；HTTP 500: 获取收藏列表失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/favorites?type=wiki"
@@ -3653,10 +3386,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/favorites?type=wiki"
 
 - 用途：创建/提交/触发 favorites；目标资源与完整业务约束见第 12 章「收藏、通知与公告」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart targetType required enum wiki|post|music|gallery; targetId required string (slug/id/docId by type)；解析 schema manual favorite parser。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 201: <code>favorited</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：201, 400, 401, 403, 404, 500。HTTP 400: 缺少必要字段；HTTP 404: 目标不存在；HTTP 500: 收藏失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：targetType 必填 string；targetId 必填 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_favorites`。
+- 成功响应：HTTP 201：application/json <code>favorited</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 404, 429, 500。HTTP 400: 缺少必要字段；HTTP 404: 目标不存在；HTTP 500: 收藏失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"targetType":"post","targetId":"REPLACE_WITH_POST_ID"}' "$BASE_URL/api/favorites"
@@ -3668,10 +3400,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：删除/移除 favorites；目标资源与完整业务约束见第 12 章「收藏、通知与公告」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；type: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>favorited</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 参数错误；HTTP 500: 取消收藏失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path type 必填 string；id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_favorites_type_id`。
+- 成功响应：HTTP 200：application/json <code>favorited</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 参数错误；HTTP 500: 取消收藏失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/favorites/REPLACE_TYPE/REPLACE_ID"
@@ -3683,10 +3414,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/favorites/REPLA
 
 - 用途：读取 announcements / latest；目标资源与完整业务约束见第 12 章「收藏、通知与公告」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from cached</code>、<code>announcement</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200。无显式错误状态。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_announcements_latest`。
+- 成功响应：HTTP 200：application/json <code>announcement</code>。
+- HTTP 状态/失败：200, 401, 429。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/announcements/latest"
@@ -3698,10 +3428,9 @@ curl --fail-with-body "$BASE_URL/api/announcements/latest"
 
 - 用途：读取 announcements / list；目标资源与完整业务约束见第 12 章「收藏、通知与公告」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query limit: integer default 20 clamp 1–100 unless handler overrides；page: integer default 1 minimum 1；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>announcements</code>、<code>nested DTO fields</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200。无显式错误状态。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_announcements_list`。
+- 成功响应：HTTP 200：application/json <code>announcements</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 429。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/announcements/list?limit=20&page=1"
@@ -3713,10 +3442,9 @@ curl --fail-with-body "$BASE_URL/api/announcements/list?limit=20&page=1"
 
 - 用途：读取 announcements；目标资源与完整业务约束见第 12 章「收藏、通知与公告」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>announcements</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403。HTTP 401/403 分支；触发条件见领域说明。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_announcements`。
+- 成功响应：HTTP 200：application/json <code>announcements</code>。
+- HTTP 状态/失败：200, 401, 403, 429。HTTP 401/403 分支；触发条件见领域说明。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/announcements"
@@ -3728,10 +3456,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/announcements"
 
 - 用途：创建/提交/触发 announcements；目标资源与完整业务约束见第 12 章「收藏、通知与公告」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart active: optional boolean；content: required string；link: optional string。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 201: <code>announcement</code>；HTTP 400: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：201, 400, 401, 403。HTTP 400: 公告内容不能为空。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：content 必填 string ≤5000 字符；link 可选 string ≤2048 字符；active 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_announcements`。
+- 成功响应：HTTP 201：application/json <code>announcement</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 429。HTTP 400: 公告内容不能为空。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"active":true,"content":"文档测试内容","link":"REPLACE_LINK"}' "$BASE_URL/api/announcements"
@@ -3743,10 +3470,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：部分更新 announcements；目标资源与完整业务约束见第 12 章「收藏、通知与公告」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart active: optional boolean；content: optional string；link: optional string。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>announcement</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403。HTTP 401/403 分支；触发条件见领域说明。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：active 可选 boolean；content 可选 string ≤5000 字符；link 可选 string ≤2048 字符。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_announcements_id`。
+- 成功响应：HTTP 200：application/json <code>announcement</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429。HTTP 401/403 分支；触发条件见领域说明。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"active":true,"content":"文档测试内容","link":"REPLACE_LINK"}' "$BASE_URL/api/announcements/REPLACE_ID"
@@ -3758,10 +3484,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：删除/移除 announcements；目标资源与完整业务约束见第 12 章「收藏、通知与公告」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 404: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 404。HTTP 404: 公告不存在。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_announcements_id`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 404, 429。HTTP 404: 公告不存在。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/announcements/REPLACE_ID"
@@ -3804,10 +3529,9 @@ POST /api/search/by-image 使用 multipart image 或 imageBase64；须启用语�
 
 - 用途：读取 s3 / config；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from config</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取 S3 配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_s3_config`。
+- 成功响应：HTTP 200：application/json <code>enabled</code>、<code>endpoint</code>、<code>bucket</code>、<code>prefix</code>、<code>publicDomain</code>、<code>maxFileSize</code>、<code>allowedContentTypes</code>、<code>md5Required</code>、<code>s3BaseUrl</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取 S3 配置失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/s3/config"
@@ -3819,10 +3543,9 @@ curl --fail-with-body "$BASE_URL/api/s3/config"
 
 - 用途：读取 s3 / presign upload；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query filename required string; contentType?:MIME; contentMd5?:32-hex; fileSize?:positive integer；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from result</code>、<code>error</code>；HTTP 400: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403。HTTP 400: 缺少 filename 参数。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query filename 可选 string；contentType 可选 string；contentMd5 可选 string；fileSize 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_s3_presign_upload`。
+- 成功响应：HTTP 200：application/json <code>uploadUrl</code>、<code>url</code>、<code>key</code>、<code>expiresIn</code>、<code>md5Required</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, default。HTTP 400: 缺少 filename 参数。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/s3/presign-upload?filename=test.png&contentType=image%2Fpng&fileSize=1024"
@@ -3834,10 +3557,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/s3/presign-upload?filenam
 
 - 用途：读取 s3 / presign download；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：已认证。
-- 参数契约：path key: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>downloadUrl</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 缺少 key 参数。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path key 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_s3_presign_download_key`。
+- 成功响应：HTTP 200：application/json <code>downloadUrl</code>。
+- HTTP 状态/失败：200, 400, 401, 429, 500。HTTP 400: 缺少 key 参数。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/s3/presign-download/example/key"
@@ -3849,10 +3571,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/s3/presign-download/examp
 
 - 用途：读取 s3 / presign delete；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：管理员。
-- 参数契约：path key: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>deleteUrl</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 缺少 key 参数。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path key 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_s3_presign_delete_key`。
+- 成功响应：HTTP 200：application/json <code>deleteUrl</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 缺少 key 参数。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/s3/presign-delete/example/key"
@@ -3864,8 +3585,8 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/s3/presign-delete/example
 
 - 用途：读取 search；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。限流器 searchLimiter。
-- 参数契约：path 无 path 字段；query q?:string; type=all|wiki|posts|galleries|music|albums|lyrics default all; mode=keyword|vector|hybrid default keyword; category/tags/startDate/endDate/detail; per-domain page parameters default1；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from cached</code>、<code>response from makeHybridPagedResponse(hybridResponse, {
+- 参数契约：path 无；query q 可选 string；type 可选 string；mode 可选 string；category 可选 string；startDate 可选 string；endDate 可选 string；tags 可选 string；wikiPage 可选 string；postsPage 可选 string；galleriesPage 可选 string；musicPage 可选 string；albumsPage 可选 string；lyricsPage 可选 string；detail 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_search`。
+- 成功响应：HTTP 200：application/json <code>wiki</code>、<code>posts</code>、<code>galleries</code>、<code>music</code>、<code>albums</code>、<code>lyrics</code>、<code>searchMeta</code>。
   wiki: wikiPage,
   posts: postsPage,
   galleries: galleriesPage,
@@ -3873,8 +3594,7 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/s3/presign-delete/example
   albums: albumsPage,
   lyrics: lyricsPage,
   })</code>、<code>wiki</code>、<code>posts</code>、<code>galleries</code>、<code>music</code>、<code>albums</code>、<code>lyrics</code>、<code>searchMeta</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toGalleryListResponse、toMusicResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 404, 500。HTTP 500: 搜索失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 500: 搜索失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/search?q=%E7%A4%BA%E4%BE%8B&type=all&mode=keyword&page=1"
@@ -3886,10 +3606,9 @@ curl --fail-with-body "$BASE_URL/api/search?q=%E7%A4%BA%E4%BE%8B&type=all&mode=k
 
 - 用途：读取 search / text semantic；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。限流器 searchLimiter。
-- 参数契约：path 无 path 字段；query q required nonempty; detail?:boolean query string; requires semantic-search feature enabled；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>results</code>、<code>total</code>、<code>query</code>、<code>minScore</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 400: 请提供搜索文字 (q 参数)；HTTP 500: 文本语义搜索失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query q 可选 string；page 可选 string；minScore 可选 string；detail 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_search_text_semantic`。
+- 成功响应：HTTP 200：application/json <code>results</code>、<code>total</code>、<code>query</code>、<code>minScore</code>。
+- HTTP 状态/失败：200, 400, 401, 404, 429, 500。HTTP 400: 请提供搜索文字 (q 参数)；HTTP 500: 文本语义搜索失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/search/text-semantic?q=%E7%A4%BA%E4%BE%8B&detail=true"
@@ -3901,10 +3620,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/search/text-semantic?q=%E
 
 - 用途：读取 search / hot keywords；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>keywords</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取热门关键词失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_search_hot_keywords`。
+- 成功响应：HTTP 200：application/json <code>keywords</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取热门关键词失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/search/hot-keywords"
@@ -3916,10 +3634,9 @@ curl --fail-with-body "$BASE_URL/api/search/hot-keywords"
 
 - 用途：创建/提交/触发 search / by image；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。限流器 searchLimiter。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart multipart image 或 JSON imageBase64 二选一；body page/minScore 可选；解析 schema image search request。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>mode</code>、<code>sessionId</code>、<code>categoryPages</code>、<code>totalMatches</code>、<code>results</code>；HTTP 400: <code>error</code>；HTTP 413: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 413, 500。HTTP 400: 请上传图片文件，或提供 imageBase64；HTTP 413: 图片像素超过搜索上限，请压缩后重试；HTTP 500: 图片语义搜索失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：page 可选 integer；minScore 可选 number，最小 0，最大 1；imageBase64 可选 string；或 multipart/form-data：page 可选 integer；minScore 可选 number，最小 0，最大 1；imageBase64 可选 string；image 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_search_by_image`。
+- 成功响应：HTTP 200：application/json <code>mode</code>、<code>sessionId</code>、<code>categoryPages</code>、<code>totalMatches</code>、<code>results</code>。
+- HTTP 状态/失败：200, 400, 401, 404, 413, 429, 500。HTTP 400: 请上传图片文件，或提供 imageBase64；HTTP 413: 图片像素超过搜索上限，请压缩后重试；HTTP 500: 图片语义搜索失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -F 'image=@./test-fixture.png' "$BASE_URL/api/search/by-image"
@@ -3931,10 +3648,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -F 'image=@./test-fixture.png' "
 
 - 用途：读取 search / by image；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。限流器 searchLimiter。
-- 参数契约：path sessionId: required string path parameter；query source=semantic|wiki|post|gallery; page integer default1; same anonymous/user identity required；body/multipart 此处理器不读取 JSON body；解析 schema image search polling。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>mode</code>、<code>sessionId</code>、<code>totalMatches</code>、<code>results</code>；HTTP 400: <code>error</code>；HTTP 410: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 410。HTTP 400: 无效的图片搜索来源；HTTP 410: 图片搜索会话已过期，请重新上传图片。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path sessionId 必填 string；query source 可选 string；page 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_search_by_image_sessionId`。
+- 成功响应：HTTP 200：application/json <code>mode</code>、<code>sessionId</code>、<code>totalMatches</code>、<code>results</code>。
+- HTTP 状态/失败：200, 400, 401, 410, 429。HTTP 400: 无效的图片搜索来源；HTTP 410: 图片搜索会话已过期，请重新上传图片。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/search/by-image/REPLACE_SESSIONID?source=semantic&page=1"
@@ -3946,10 +3662,9 @@ curl --fail-with-body "$BASE_URL/api/search/by-image/REPLACE_SESSIONID?source=se
 
 - 用途：读取 search / semantic search；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。限流器 searchLimiter。
-- 参数契约：path 无 path 字段；query q required nonempty; detail?:boolean; minScore?:number; requires semantic-search feature enabled；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>mode</code>、<code>query</code>、<code>totalMatches</code>、<code>results</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 400: 请提供搜索文字 (q 参数)；HTTP 500: 语义搜索失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query q 可选 string；page 可选 string；minScore 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_search_semantic_search`。
+- 成功响应：HTTP 200：application/json <code>mode</code>、<code>query</code>、<code>totalMatches</code>、<code>results</code>。
+- HTTP 状态/失败：200, 400, 401, 404, 429, 500。HTTP 400: 请提供搜索文字 (q 参数)；HTTP 500: 语义搜索失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/search/semantic-search?q=%E7%A4%BA%E4%BE%8B&detail=true"
@@ -3961,10 +3676,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/search/semantic-search?q=
 
 - 用途：读取 search / suggest；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。限流器 searchLimiter。
-- 参数契约：path 无 path 字段；query q required min2 chars; limit handler-clamped; returns candidates；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>suggestions</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 500: 搜索建议失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query q 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_search_suggest`。
+- 成功响应：HTTP 200：application/json <code>suggestions</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 搜索建议失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/search/suggest?q=%E7%A4%BA%E4%BE%8B"
@@ -3976,10 +3690,9 @@ curl --fail-with-body "$BASE_URL/api/search/suggest?q=%E7%A4%BA%E4%BE%8B"
 
 - 用途：读取 image maps；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query md5?:32-hex; page integer default1; limit integer default20; response fields include normalized mapping；body/multipart 此处理器不读取 JSON body；解析 schema query parameters。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>items</code>、<code>nested DTO fields</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 500: 获取图片映射失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query md5 可选 string；page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_image_maps`。
+- 成功响应：HTTP 200：application/json <code>items</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取图片映射失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/image-maps?page=1&limit=20"
@@ -3991,10 +3704,9 @@ curl --fail-with-body "$BASE_URL/api/image-maps?page=1&limit=20"
 
 - 用途：读取 image maps / export；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query format=json|csv; default json；body/multipart 此处理器不读取 JSON body；解析 schema image-map export。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：JSON by format branch or file stream; download Content-Type/CSV are described in the domain section。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 500: 导出图片映射失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query format 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_image_maps_export`。
+- 成功响应：HTTP 200：application/json <code>items</code>；text/csv 附件或文件正文。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 导出图片映射失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/image-maps/export?format=json"
@@ -4006,10 +3718,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/image-maps/export?format=
 
 - 用途：读取 image maps / stats；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>total</code>、<code>stats</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取图片统计失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_image_maps_stats`。
+- 成功响应：HTTP 200：application/json <code>total</code>、<code>stats</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取图片统计失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/image-maps/stats"
@@ -4021,10 +3732,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/image-maps/stats"
 
 - 用途：创建/提交/触发 image maps / import；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart externalUrl: optional string；id: optional string；items: optional Array<{；localUrl: optional string；md5: required string；mode: optional 'update' | 'create' | 'upsert'；s3Url: optional string；storageType: optional 'local' | 'external' | 's3'。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>failed</code>、<code>errors</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 缺少导入数据或模式 / 导入模式无效；HTTP 500: 导入图片映射失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：items 必填 object[]；mode 必填 "update"|"create"|"upsert"。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_image_maps_import`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>failed</code>、<code>errors</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 缺少导入数据或模式 / 导入模式无效；HTTP 500: 导入图片映射失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"externalUrl":"REPLACE_EXTERNALURL","id":"REPLACE_ID","items":"REPLACE_ITEMS","localUrl":"REPLACE_LOCALURL","md5":"REPLACE_MD5","mode":"dry-run","s3Url":"REPLACE_S3URL","storageType":"REPLACE_STORAGETYPE"}' "$BASE_URL/api/image-maps/import"
@@ -4036,10 +3746,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 image maps / refresh all blurhash；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query limit: optional string；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>message</code>、<code>processed</code>、<code>failed</code>、<code>total</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 刷新 blurhash 失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query limit 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_image_maps_refresh_all_blurhash`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>message</code>、<code>processed</code>、<code>failed</code>、<code>total</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 刷新 blurhash 失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/image-maps/refresh-all-blurhash"
@@ -4051,10 +3760,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/image-maps/refres
 
 - 用途：读取 image maps；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>item</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 404, 500。HTTP 404: 图片映射不存在；HTTP 500: 获取图片映射失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_image_maps_id`。
+- 成功响应：HTTP 200：application/json <code>item</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 404: 图片映射不存在；HTTP 500: 获取图片映射失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/image-maps/REPLACE_ID"
@@ -4066,10 +3774,9 @@ curl --fail-with-body "$BASE_URL/api/image-maps/REPLACE_ID"
 
 - 用途：创建/提交/触发 image maps；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart externalUrl: optional string；id: required string；localUrl: optional string；md5: required string；s3Url: optional string；storageType: optional 'local' | 'external' | 's3'。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 201: <code>item</code>；HTTP 400: <code>error</code>；HTTP 409: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：201, 400, 401, 403, 409, 500。HTTP 400: id、32 位 md5 和非空 localUrl 为必填字段；HTTP 409: 图片映射已存在，请使用管理员导入或更新接口；HTTP 500: 保存图片映射失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：id 必填 string；md5 必填 string；localUrl 可选 string；externalUrl 可选 string；s3Url 可选 string；storageType 可选 "local"|"external"|"s3"。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_image_maps`。
+- 成功响应：HTTP 201：application/json <code>item</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 409, 429, 500。HTTP 400: id、32 位 md5 和非空 localUrl 为必填字段；HTTP 409: 图片映射已存在，请使用管理员导入或更新接口；HTTP 500: 保存图片映射失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"externalUrl":"REPLACE_EXTERNALURL","id":"REPLACE_ID","localUrl":"REPLACE_LOCALURL","md5":"REPLACE_MD5","s3Url":"REPLACE_S3URL","storageType":"REPLACE_STORAGETYPE"}' "$BASE_URL/api/image-maps"
@@ -4081,10 +3788,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：部分更新 image maps；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart blurhash: optional string | null；externalUrl: optional string | null；localUrl: optional string | null；s3Url: optional string | null；storageType: optional 'local' | 'external' | 's3'；thumbhash: optional string | null。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>item</code>、<code>error</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: localUrl 不能为空；HTTP 500: 更新图片映射失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：localUrl 必填 string|null；externalUrl 可选 string|null；s3Url 可选 string|null；storageType 可选 "local"|"external"|"s3"；blurhash 可选 string|null；thumbhash 可选 string|null。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_image_maps_id`。
+- 成功响应：HTTP 200：application/json <code>item</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500, default。HTTP 400: localUrl 不能为空；HTTP 500: 更新图片映射失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"blurhash":"REPLACE_BLURHASH","externalUrl":"REPLACE_EXTERNALURL","localUrl":"REPLACE_LOCALURL","s3Url":"REPLACE_S3URL","storageType":"REPLACE_STORAGETYPE","thumbhash":"REPLACE_THUMBHASH"}' "$BASE_URL/api/image-maps/REPLACE_ID"
@@ -4096,10 +3802,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：删除/移除 image maps；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 删除图片映射失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_image_maps_id`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500, default。HTTP 500: 删除图片映射失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/image-maps/REPLACE_ID"
@@ -4111,10 +3816,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/image-maps/REPL
 
 - 用途：创建/提交/触发 image maps / refresh blurhash；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>item</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 没有可用的本地图片路径；HTTP 404: 图片映射不存在；HTTP 500: 生成 blurhash 失败 / 刷新 blurhash 失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_image_maps_id_refresh_blurhash`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>item</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 没有可用的本地图片路径；HTTP 404: 图片映射不存在；HTTP 500: 生成 blurhash 失败 / 刷新 blurhash 失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/image-maps/REPLACE_ID/refresh-blurhash"
@@ -4126,10 +3830,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/image-maps/REPLAC
 
 - 用途：创建/提交/触发 image maps / migrate to s3；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query limit: optional string；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>message</code>、<code>total</code>、<code>processed</code>、<code>failed</code>、<code>errors</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: S3 存储未启用，请先配置 S3；HTTP 500: 迁移到 S3 失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query limit 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_image_maps_migrate_to_s3`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>message</code>、<code>total</code>、<code>processed</code>、<code>failed</code>、<code>errors</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: S3 存储未启用，请先配置 S3；HTTP 500: 迁移到 S3 失败。
 
 ```bash
 # Resource-intensive or external side effect; use only in an isolated service environment.
@@ -4142,10 +3845,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/image-maps/migrat
 
 - 用途：读取 regions；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query q?:string; level?:integer1–4; parentCode?:region code; limit integer1–100 default20; q search precedes hierarchy list；body/multipart 此处理器不读取 JSON body；解析 schema region search/list。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>regions</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 500: 获取地区失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query q 可选 string；level 可选 string；parentCode 可选 string；limit 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_regions`。
+- 成功响应：HTTP 200：application/json <code>regions</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取地区失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/regions?limit=20"
@@ -4157,10 +3859,9 @@ curl --fail-with-body "$BASE_URL/api/regions?limit=20"
 
 - 用途：读取 regions / search；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query q?:string; limit integer1–100 default20；body/multipart 此处理器不读取 JSON body；解析 schema region search。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>regions</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 500: 搜索地区失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query q 可选 string；limit 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_regions_search`。
+- 成功响应：HTTP 200：application/json <code>regions</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 搜索地区失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/regions/search?q=%E5%8C%97%E4%BA%AC&limit=20"
@@ -4172,10 +3873,9 @@ curl --fail-with-body "$BASE_URL/api/regions/search?q=%E5%8C%97%E4%BA%AC&limit=2
 
 - 用途：读取 regions / suggest；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query q?:string; limit integer1–100 default5；body/multipart 此处理器不读取 JSON body；解析 schema region suggest。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>regions</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 500。HTTP 500: 获取地区建议失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query q 可选 string；limit 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_regions_suggest`。
+- 成功响应：HTTP 200：application/json <code>regions</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取地区建议失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/regions/suggest?q=%E5%8C%97%E4%BA%AC&limit=5"
@@ -4187,10 +3887,9 @@ curl --fail-with-body "$BASE_URL/api/regions/suggest?q=%E5%8C%97%E4%BA%AC&limit=
 
 - 用途：读取 regions / provinces；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>provinces</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取省份失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_regions_provinces`。
+- 成功响应：HTTP 200：application/json <code>provinces</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取省份失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/regions/provinces"
@@ -4202,10 +3901,9 @@ curl --fail-with-body "$BASE_URL/api/regions/provinces"
 
 - 用途：读取 regions / cities；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。
-- 参数契约：path provinceCode: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>cities</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取城市失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path provinceCode 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_regions_cities_provinceCode`。
+- 成功响应：HTTP 200：application/json <code>cities</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取城市失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/regions/cities/REPLACE_PROVINCECODE"
@@ -4217,10 +3915,9 @@ curl --fail-with-body "$BASE_URL/api/regions/cities/REPLACE_PROVINCECODE"
 
 - 用途：读取 regions / districts；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。
-- 参数契约：path cityCode: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>districts</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取区县失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path cityCode 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_regions_districts_cityCode`。
+- 成功响应：HTTP 200：application/json <code>districts</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取区县失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/regions/districts/REPLACE_CITYCODE"
@@ -4232,10 +3929,9 @@ curl --fail-with-body "$BASE_URL/api/regions/districts/REPLACE_CITYCODE"
 
 - 用途：读取 regions / resolve；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>result</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 404。HTTP 400: 无效的坐标参数；HTTP 404: 无法解析该坐标对应的行政区划。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_regions_resolve`。
+- 成功响应：HTTP 200：application/json <code>result</code>。
+- HTTP 状态/失败：200, 400, 401, 404, 429, 500, 502, 503。HTTP 400: 无效的坐标参数；HTTP 404: 无法解析该坐标对应的行政区划。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/regions/resolve"
@@ -4247,10 +3943,9 @@ curl --fail-with-body "$BASE_URL/api/regions/resolve"
 
 - 用途：创建/提交/触发 regions / resolve；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart lat: required number；lng: required number；validateBody schema coordinateSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>result</code>；HTTP 404: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 404。HTTP 404: 无法解析该坐标对应的行政区划。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：lng 必填 number，最小 -180，最大 180；lat 必填 number，最小 -90，最大 90。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_regions_resolve`。
+- 成功响应：HTTP 200：application/json <code>result</code>。
+- HTTP 状态/失败：200, 400, 401, 404, 429, 500, 502, 503。HTTP 404: 无法解析该坐标对应的行政区划。
 
 ```bash
 curl --fail-with-body -X POST -H 'Content-Type: application/json' --data '{"lat":"REPLACE_LAT","lng":"REPLACE_LNG"}' "$BASE_URL/api/regions/resolve"
@@ -4262,10 +3957,9 @@ curl --fail-with-body -X POST -H 'Content-Type: application/json' --data '{"lat"
 
 - 用途：读取 regions / search / address；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>results</code>；HTTP 400: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400。HTTP 400: 无效的地址搜索参数。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_regions_search_address`。
+- 成功响应：HTTP 200：application/json <code>results</code>。
+- HTTP 状态/失败：200, 400, 401, 429, 500, 502, 503。HTTP 400: 无效的地址搜索参数。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/regions/search/address"
@@ -4277,10 +3971,9 @@ curl --fail-with-body "$BASE_URL/api/regions/search/address"
 
 - 用途：读取 regions；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：公开/可选身份。
-- 参数契约：path code: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>region</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 404, 500。HTTP 404: 地区不存在；HTTP 500: 获取地区详情失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path code 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_regions_code`。
+- 成功响应：HTTP 200：application/json <code>region</code>。
+- HTTP 状态/失败：200, 401, 404, 429, 500。HTTP 404: 地区不存在；HTTP 500: 获取地区详情失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/regions/REPLACE_CODE"
@@ -4292,10 +3985,9 @@ curl --fail-with-body "$BASE_URL/api/regions/REPLACE_CODE"
 
 - 用途：创建/提交/触发 exif / extract gps；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart imageUrls: required string[]。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 请提供图片 URL 列表；HTTP 500: 提取 GPS 信息失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：imageUrls 必填 string[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_exif_extract_gps`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 请提供图片 URL 列表；HTTP 500: 提取 GPS 信息失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"imageUrls":["https://example.invalid/image.jpg"]}' "$BASE_URL/api/exif/extract-gps"
@@ -4307,10 +3999,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 exif / extract gps with region；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart imageUrls: required string[]。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>；HTTP 503: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500, 503。HTTP 400: 请提供图片 URL 列表；HTTP 500: 提取 GPS 信息并解析行政区划失败；HTTP 503: 地图服务未配置，无法解析行政区划。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：imageUrls 必填 string[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_exif_extract_gps_with_region`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500, 503。HTTP 400: 请提供图片 URL 列表；HTTP 500: 提取 GPS 信息并解析行政区划失败；HTTP 503: 地图服务未配置，无法解析行政区划。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"imageUrls":["https://example.invalid/image.jpg"]}' "$BASE_URL/api/exif/extract-gps-with-region"
@@ -4322,10 +4013,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：读取 exif / extract single；目标资源与完整业务约束见第 13 章「搜索、地区与 EXIF」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query url required nonempty image URL; server fetches file, so use only trusted URLs；body/multipart 此处理器不读取 JSON body；解析 schema EXIF single URL。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 请提供图片 URL；HTTP 500: 提取单张图片 GPS 信息失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query url 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_exif_extract_single`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 请提供图片 URL；HTTP 500: 提取单张图片 GPS 信息失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/exif/extract-single?url=https%3A%2F%2Fexample.invalid%2Fimage.jpg"
@@ -4412,7 +4102,7 @@ DELETE /api/admin/:tab/:id/permanent 是不可逆硬删除，仅管理员；包�
 - /api/config/s3/config：管理员；返回公开 S3 配置(enabled/endpoint/bucket/prefix/publicDomain/maxFileSize/allowedContentTypes/md5Required/s3BaseUrl)，不含访问密钥。
 - /api/config/s3/presign-upload|presign-download/*key|presign-delete/*key 与 /api/s3 同业务实现，详见对应逐接口条目。
 
-### 逐接口契约（88 项）
+### 逐接口契约（89 项）
 
 <a id="api-get-api-admin-media-maintenance-scan"></a>
 
@@ -4420,10 +4110,9 @@ DELETE /api/admin/:tab/:id/permanent 是不可逆硬删除，仅管理员；包�
 
 - 用途：读取 admin / media maintenance / scan；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query mode:strict|business(default strict); limit:integer1–100(default100); type=all only；body/multipart 此处理器不读取 JSON body；validateBody schema mediaMaintenanceScanQuerySchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200 {success:true,data:<maintenance result>}；本章列出 operation-specific counters/cursors。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 413。ZodError 400；batchSize/limit 超上限 413；MediaMaintenanceRequestError 返回其 statusCode。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query mode 可选 strict|business，默认 "strict"；limit 可选 integer；type 可选 all|gallery|song|album，默认 "all"；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_media_maintenance_scan`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 413, 429。ZodError 400；batchSize/limit 超上限 413；MediaMaintenanceRequestError 返回其 statusCode。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/media-maintenance/scan?mode=strict&limit=100&type=all"
@@ -4435,10 +4124,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/media-maintenance/s
 
 - 用途：创建/提交/触发 admin / media maintenance / reconcile；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart mode=dry-run|apply(default dry-run); cursor?:string1–1024; batchSize:integer1–100(default100); type=all|gallery|song|album(default all), only localize accepts non-all type；解析 schema mediaMaintenanceBatchSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200 {success:true,data:<maintenance result>}；本章列出 operation-specific counters/cursors。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 413。ZodError 400；batchSize/limit 超上限 413；MediaMaintenanceRequestError 返回其 statusCode。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：mode 可选 dry-run|apply，默认 "dry-run"；cursor 可选 string ≤1024 字符；batchSize 可选 integer，最小 1，最大 100；type 可选 all|gallery|song|album，默认 "all"。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_media_maintenance_reconcile`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 413, 429。ZodError 400；batchSize/limit 超上限 413；MediaMaintenanceRequestError 返回其 statusCode。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"mode":"dry-run","batchSize":100,"type":"all"}' "$BASE_URL/api/admin/media-maintenance/reconcile"
@@ -4450,10 +4138,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 admin / media maintenance / bind legacy；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart mode=dry-run|apply(default dry-run); cursor?:string1–1024; batchSize:integer1–100(default100); type=all|gallery|song|album(default all), only localize accepts non-all type；解析 schema mediaMaintenanceBatchSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200 {success:true,data:<maintenance result>}；本章列出 operation-specific counters/cursors。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 413。ZodError 400；batchSize/limit 超上限 413；MediaMaintenanceRequestError 返回其 statusCode。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：mode 可选 dry-run|apply，默认 "dry-run"；cursor 可选 string ≤1024 字符；batchSize 可选 integer，最小 1，最大 100；type 可选 all|gallery|song|album，默认 "all"。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_media_maintenance_bind_legacy`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 413, 429。ZodError 400；batchSize/limit 超上限 413；MediaMaintenanceRequestError 返回其 statusCode。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"mode":"dry-run","batchSize":100,"type":"all"}' "$BASE_URL/api/admin/media-maintenance/bind-legacy"
@@ -4465,10 +4152,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 admin / media maintenance / localize；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart mode=dry-run|apply(default dry-run); cursor?:string1–1024; batchSize:integer1–100(default100); type=all|gallery|song|album(default all), only localize accepts non-all type；解析 schema mediaMaintenanceBatchSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200 {success:true,data:<maintenance result>}；本章列出 operation-specific counters/cursors。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 413。ZodError 400；batchSize/limit 超上限 413；MediaMaintenanceRequestError 返回其 statusCode。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：mode 可选 dry-run|apply，默认 "dry-run"；cursor 可选 string ≤1024 字符；batchSize 可选 integer，最小 1，最大 100；type 可选 all|gallery|song|album，默认 "all"。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_media_maintenance_localize`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 413, 429。ZodError 400；batchSize/limit 超上限 413；MediaMaintenanceRequestError 返回其 statusCode。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"mode":"dry-run","batchSize":100,"type":"all"}' "$BASE_URL/api/admin/media-maintenance/localize"
@@ -4480,10 +4166,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 admin / media maintenance / repair thumbnails；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart mode=dry-run|apply(default dry-run); cursor?:string1–1024; batchSize:integer1–100(default100); type=all|gallery|song|album(default all), only localize accepts non-all type；解析 schema mediaMaintenanceBatchSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200 {success:true,data:<maintenance result>}；本章列出 operation-specific counters/cursors。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 413。ZodError 400；batchSize/limit 超上限 413；MediaMaintenanceRequestError 返回其 statusCode。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：mode 可选 dry-run|apply，默认 "dry-run"；cursor 可选 string ≤1024 字符；batchSize 可选 integer，最小 1，最大 100；type 可选 all|gallery|song|album，默认 "all"。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_media_maintenance_repair_thumbnails`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 413, 429。ZodError 400；batchSize/limit 超上限 413；MediaMaintenanceRequestError 返回其 statusCode。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"mode":"dry-run","batchSize":100,"type":"all"}' "$BASE_URL/api/admin/media-maintenance/repair-thumbnails"
@@ -4495,10 +4180,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 admin / media maintenance / orphans；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart cursor?:string1–1024; batchSize:integer1–100(default100); olderThanHours:number0–8760(default1); includeVariants:boolean(default false)；validateBody schema mediaMaintenanceOrphanPreviewSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200 {success:true,data:<maintenance result>}；本章列出 operation-specific counters/cursors。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 413。ZodError 400；batchSize/limit 超上限 413；MediaMaintenanceRequestError 返回其 statusCode。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：cursor 可选 string ≤1024 字符；batchSize 可选 integer，最小 1，最大 100；olderThanHours 可选 number，最小 0，最大 8760；includeVariants 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_media_maintenance_orphans_preview`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 413, 429。ZodError 400；batchSize/limit 超上限 413；MediaMaintenanceRequestError 返回其 statusCode。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"batchSize":100,"olderThanHours":1,"includeVariants":false}' "$BASE_URL/api/admin/media-maintenance/orphans/preview"
@@ -4510,10 +4194,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 admin / media maintenance / orphans；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart previewToken:nonempty max32768; storageKeys:array1–100, each string1–512; strict；validateBody schema mediaMaintenanceOrphanDeleteSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200 {success:true,data:<maintenance result>}；本章列出 operation-specific counters/cursors。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 413。ZodError 400；batchSize/limit 超上限 413；MediaMaintenanceRequestError 返回其 statusCode。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：previewToken 必填 string，1–32768 字符；storageKeys 必填 string[]，1–100 项，每项 1–512 字符；拒绝未知字段。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_media_maintenance_orphans_delete`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 409, 413, 429。ZodError 400；batchSize/limit 超上限 413；MediaMaintenanceRequestError 返回其 statusCode。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"previewToken":"REPLACE_WITH_PREVIEW_TOKEN","storageKeys":["REPLACE_WITH_PREVIEW_STORAGE_KEY"]}' "$BASE_URL/api/admin/media-maintenance/orphans/delete"
@@ -4525,10 +4208,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：读取 admin / review queue / count；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query type=all|wiki|post/posts|gallery/galleries|ticket/tickets/ticketListing; status=draft|pending|published|rejected default pending；body/multipart 此处理器不读取 JSON body；解析 schema moderation count query。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>status</code>、<code>counts</code>、<code>total</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: type 必须为 wiki、posts、galleries 或 tickets；HTTP 500: 获取审核队列数量失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query type 可选 string；status 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_review_queue_count`。
+- 成功响应：HTTP 200：application/json <code>status</code>、<code>counts</code>、<code>total</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: type 必须为 wiki、posts、galleries 或 tickets；HTTP 500: 获取审核队列数量失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/review-queue/count?type=all&status=pending"
@@ -4540,10 +4222,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/review-queue/count?
 
 - 用途：读取 admin / review queue；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query type=all or one target alias; status=draft|pending|published|rejected default pending; page/limit pagination for all；body/multipart 此处理器不读取 JSON body；解析 schema moderation list query。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>type</code>、<code>status</code>、<code>items</code>、<code>nested DTO fields</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toWikiResponse、toGalleryListResponse、toPostResponse、toTicketListingListResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: type 必须为 wiki、posts、galleries 或 tickets；HTTP 500: 获取审核队列失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query status 可选 string；type 可选 string；page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_review_queue`。
+- 成功响应：HTTP 200：application/json <code>type</code>、<code>status</code>、<code>items</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: type 必须为 wiki、posts、galleries 或 tickets；HTTP 500: 获取审核队列失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/review-queue?type=all&status=pending&page=1&limit=20"
@@ -4555,10 +4236,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/review-queue?type=a
 
 - 用途：更新/执行 admin / review queue / approve；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart type?:wiki|post/posts|gallery/galleries|ticket/tickets/ticketListing; defaults wiki；解析 schema review action body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from result</code>、<code>error</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 无效审核类型；HTTP 500: 审核通过失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：type 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_admin_review_queue_id_approve`。
+- 成功响应：HTTP 200：application/json <code>item</code>、<code>targetType</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500, default。HTTP 400: 无效审核类型；HTTP 500: 审核通过失败。
 
 ```bash
 curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"type":"wiki"}' "$BASE_URL/api/admin/review-queue/REPLACE_ID/approve"
@@ -4570,10 +4250,9 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：更新/执行 admin / review queue / reject；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart type optional (default wiki); note required trimmed nonempty string；解析 schema review rejection body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from result</code>、<code>error</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 无效审核类型 / 驳回原因不能为空；HTTP 500: 驳回失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：type 可选 string；note 必填 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_admin_review_queue_id_reject`。
+- 成功响应：HTTP 200：application/json <code>item</code>、<code>targetType</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500, default。HTTP 400: 无效审核类型 / 驳回原因不能为空；HTTP 500: 驳回失败。
 
 ```bash
 curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"type":"wiki","note":"隔离测试说明"}' "$BASE_URL/api/admin/review-queue/REPLACE_ID/reject"
@@ -4585,10 +4264,9 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：创建/提交/触发 admin / review；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path action: required string path parameter；id: required string path parameter；type: required string path parameter；query 无 query 字段；body/multipart type/action from path; action approve|reject; reject requires note；解析 schema legacy review action body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from result</code>、<code>error</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 无效的操作 / 驳回原因不能为空 / 无效的类型；HTTP 500: 审核操作失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path type 必填 string；id 必填 string；action 必填 string；query 无；application/json：note 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_review_type_id_action`。
+- 成功响应：HTTP 200：application/json <code>item</code>、<code>targetType</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500, default。HTTP 400: 无效的操作 / 驳回原因不能为空 / 无效的类型；HTTP 500: 审核操作失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"note":"隔离测试说明"}' "$BASE_URL/api/admin/review/REPLACE_TYPE/REPLACE_ID/REPLACE_ACTION"
@@ -4600,10 +4278,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：读取 admin / sensitive words；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query word: optional string；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>word</code>、<code>isSensitive</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 请提供要检查的词语；HTTP 500: 检查敏感词失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query word 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_sensitive_words`。
+- 成功响应：HTTP 200：application/json <code>word</code>、<code>isSensitive</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 请提供要检查的词语；HTTP 500: 检查敏感词失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/sensitive-words?word=REPLACE_VALUE"
@@ -4615,10 +4292,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/sensitive-words?wor
 
 - 用途：创建/提交/触发 admin / sensitive words；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart word: required string。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 400: <code>error</code>；HTTP 500: <code>error</code>；HTTP 501: <code>error</code>、<code>hint</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：400, 401, 403, 500, 501。HTTP 400: 请提供要添加的敏感词；HTTP 500: 添加敏感词失败；HTTP 501: 敏感词管理需要通过文件系统操作，请手动编辑 public/sensitive-words/words.txt 文件。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：word 必填 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_sensitive_words`。
+- 成功响应：接口当前停用，无成功响应。
+- HTTP 状态/失败：400, 401, 403, 429, 500, 501。HTTP 400: 请提供要添加的敏感词；HTTP 500: 添加敏感词失败；HTTP 501: 敏感词管理需要通过文件系统操作，请手动编辑 public/sensitive-words/words.txt 文件。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"word":"REPLACE_WORD"}' "$BASE_URL/api/admin/sensitive-words"
@@ -4630,10 +4306,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：删除/移除 admin / sensitive words；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 400: <code>error</code>；HTTP 500: <code>error</code>；HTTP 501: <code>error</code>、<code>hint</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：400, 401, 403, 500, 501。HTTP 400: 请提供要删除的敏感词；HTTP 500: 删除敏感词失败；HTTP 501: 敏感词管理需要通过文件系统操作，请手动编辑 public/sensitive-words/words.txt 文件。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_admin_sensitive_words_id`。
+- 成功响应：接口当前停用，无成功响应。
+- HTTP 状态/失败：400, 401, 403, 429, 500, 501。HTTP 400: 请提供要删除的敏感词；HTTP 500: 删除敏感词失败；HTTP 501: 敏感词管理需要通过文件系统操作，请手动编辑 public/sensitive-words/words.txt 文件。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/admin/sensitive-words/REPLACE_ID"
@@ -4645,10 +4320,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/admin/sensitive
 
 - 用途：读取 admin / locks；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query limit: integer default 20 clamp 1–100 unless handler overrides；page: integer default 1 minimum 1；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>locks</code>、<code>nested DTO fields</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取编辑锁列表失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_locks`。
+- 成功响应：HTTP 200：application/json <code>locks</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取编辑锁列表失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/locks?limit=20&page=1"
@@ -4660,10 +4334,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/locks?limit=20&page
 
 - 用途：创建/提交/触发 admin / locks；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart collection:string and recordId:string required; fixed 15-minute lease；解析 schema manual edit-lock parser。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>lock</code>、<code>acquired</code>、<code>takeover</code>、<code>renewed</code>；HTTP 201: <code>lock</code>、<code>acquired</code>；HTTP 400: <code>error</code>；HTTP 409: <code>error</code>、<code>lock</code>；HTTP 500: <code>error</code>；DTO transformer toEditLockResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 201, 400, 401, 403, 409, 500。HTTP 400: 缺少有效的锁定目标；HTTP 409: 该记录正在被其他用户编辑；HTTP 500: 申请编辑锁失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：collection 必填 string；recordId 必填 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_locks`。
+- 成功响应：HTTP 200：application/json <code>lock</code>、<code>acquired</code>、<code>takeover</code>、<code>renewed</code>；HTTP 201：application/json <code>lock</code>、<code>acquired</code>。
+- HTTP 状态/失败：200, 201, 400, 401, 403, 409, 429, 500。HTTP 400: 缺少有效的锁定目标；HTTP 409: 该记录正在被其他用户编辑；HTTP 500: 申请编辑锁失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"collection":"wiki","recordId":"REPLACE_WITH_RECORD_ID"}' "$BASE_URL/api/admin/locks"
@@ -4675,10 +4348,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：删除/移除 admin / locks；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：已认证且未封禁。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 403: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 403: 无权限释放该编辑锁；HTTP 500: 释放编辑锁失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_admin_locks_id`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 403: 无权限释放该编辑锁；HTTP 500: 释放编辑锁失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/admin/locks/REPLACE_ID"
@@ -4690,10 +4362,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/admin/locks/REP
 
 - 用途：删除/移除 admin / locks；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart lockIds:1–200 unique nonempty strings；validateBody schema adminBatchEditLocksSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>deleted</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 500: 批量释放编辑锁失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：lockIds 必填 string[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_admin_locks`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>deleted</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 500: 批量释放编辑锁失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"lockIds":["REPLACE_WITH_LOCK_ID"]}' "$BASE_URL/api/admin/locks"
@@ -4705,10 +4376,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/
 
 - 用途：读取 admin / moderation logs；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query limit: integer default 20 clamp 1–100 unless handler overrides；page: integer default 1 minimum 1；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>logs</code>、<code>nested DTO fields</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取操作日志失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_moderation_logs`。
+- 成功响应：HTTP 200：application/json <code>logs</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取操作日志失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/moderation_logs?limit=20&page=1"
@@ -4720,10 +4390,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/moderation_logs?lim
 
 - 用途：读取 admin / ban logs；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query limit: integer default 20 clamp 1–100 unless handler overrides；page: integer default 1 minimum 1；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>logs</code>、<code>nested DTO fields</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取封禁日志失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_ban_logs`。
+- 成功响应：HTTP 200：application/json <code>logs</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取封禁日志失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/ban_logs?limit=20&page=1"
@@ -4735,10 +4404,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/ban_logs?limit=20&p
 
 - 用途：部分更新 admin / music / batch display；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart songDocIds:1–200 unique string IDs; displayAlbumMode=linked|manual|none required; manualAlbumName?:string|null max200 (required for manual); displayAlbumDocId?:string|null；validateBody schema adminBatchMusicDisplaySchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>updated</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 展示模式无效 / 歌曲列表包含无效歌曲 / 手动专辑名不能为空 / 展示专辑必须已关联所有选中歌曲；HTTP 500: 批量更新歌曲展示信息失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：songDocIds 必填 string[]；displayAlbumMode 必填 linked|manual|none；manualAlbumName 可选 string|null；displayAlbumDocId 可选 string|null。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_admin_music_batch_display`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>updated</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 展示模式无效 / 歌曲列表包含无效歌曲 / 手动专辑名不能为空 / 展示专辑必须已关联所有选中歌曲；HTTP 500: 批量更新歌曲展示信息失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"songDocIds":["REPLACE_WITH_SONG_DOC_ID"],"displayAlbumMode":"none"}' "$BASE_URL/api/admin/music/batch-display"
@@ -4750,10 +4418,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：创建/提交/触发 admin / batch delete posts；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart postIds nonempty array of internal Post IDs; reason conditional on ownership；解析 schema post batch delete。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>deleted</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 请选择要删除的帖子 / 删除理由不能为空；HTTP 500: 批量删除帖子失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：postIds 必填 string[]；reason 必填 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_batch_delete_posts`。
+- 成功响应：HTTP 200：application/json <code>deleted</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 请选择要删除的帖子 / 删除理由不能为空；HTTP 500: 批量删除帖子失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"postIds":["REPLACE_WITH_POST_ID"],"reason":"隔离测试原因"}' "$BASE_URL/api/admin/batch-delete-posts"
@@ -4765,10 +4432,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 admin / batch delete galleries；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart galleryIds nonempty array of internal Gallery IDs; reason conditional on ownership；解析 schema gallery batch delete。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>deleted</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 请选择要删除的图集 / 删除理由不能为空；HTTP 500: 批量删除图集失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：galleryIds 必填 string[]；reason 必填 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_batch_delete_galleries`。
+- 成功响应：HTTP 200：application/json <code>deleted</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 请选择要删除的图集 / 删除理由不能为空；HTTP 500: 批量删除图集失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"galleryIds":["REPLACE_WITH_GALLERY_ID"],"reason":"隔离测试原因"}' "$BASE_URL/api/admin/batch-delete-galleries"
@@ -4780,10 +4446,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 admin / batch delete comments；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart commentIds nonempty array of Comment IDs; reason required for other authors；解析 schema comment batch delete。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>deleted</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 请选择要删除的评论 / 删除理由不能为空；HTTP 500: 批量删除评论失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：commentIds 必填 string[]；reason 必填 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_batch_delete_comments`。
+- 成功响应：HTTP 200：application/json <code>deleted</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 请选择要删除的评论 / 删除理由不能为空；HTTP 500: 批量删除评论失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"commentIds":["REPLACE_WITH_COMMENT_ID"],"reason":"隔离测试原因"}' "$BASE_URL/api/admin/batch-delete-comments"
@@ -4795,10 +4460,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：读取 admin / wiki links / scan；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from result</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 扫描 Wiki 链接失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_wiki_links_scan`。
+- 成功响应：HTTP 200：application/json <code>totalPages</code>、<code>localLinkCount</code>、<code>externalLinkCount</code>、<code>s3LinkCount</code>、<code>unknownLinkCount</code>、<code>details</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 扫描 Wiki 链接失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/wiki-links/scan"
@@ -4810,10 +4474,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/wiki-links/scan"
 
 - 用途：读取 admin / wiki links；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path slug: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from result</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取 Wiki 页面链接失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path slug 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_wiki_links_identifier`。
+- 成功响应：HTTP 200：application/json <code>slug</code>、<code>title</code>、<code>images</code>、<code>links</code>、<code>references</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取 Wiki 页面链接失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/wiki-links/REPLACE_SLUG"
@@ -4825,13 +4488,12 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/wiki-links/REPLACE_
 
 - 用途：更新/执行 admin / wiki links；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart mappings: required Array<{ oldUrl: string；newUrl: required string；slugs: optional string[]；useRegex: optional boolean。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from result</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 请提供链接映射规则；HTTP 500: 预览链接更新失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：mappings 必填 object[]；slugs 可选 string[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_admin_wiki_links_identifier`。
+- 成功响应：HTTP 200：application/json <code>array</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 请提供链接映射规则；HTTP 500: 预览链接更新失败。
 
 ```bash
-curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"mappings":[{"oldUrl":"https://example.invalid/old","newUrl":"https://example.invalid/new"}],"newUrl":"REPLACE_NEWURL","slugs":["REPLACE_WITH_ID"],"useRegex":"REPLACE_USEREGEX"}' "$BASE_URL/api/admin/wiki-links/REPLACE_ID"
+curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"mappings":[{"oldUrl":"https://example.invalid/old","newUrl":"https://example.invalid/new"}],"slugs":["REPLACE_WITH_SLUG"]}' "$BASE_URL/api/admin/wiki-links/REPLACE_ID"
 ```
 
 <a id="api-post-api-admin-wiki-links-update"></a>
@@ -4840,13 +4502,12 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：创建/提交/触发 admin / wiki links / update；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart dryRun: required boolean；mappings: required Array<{ oldUrl: string；newUrl: required string；useRegex: optional boolean。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from result</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 请提供链接映射规则；HTTP 500: 批量更新链接失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：mappings 必填 object[]；dryRun 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_wiki_links_update`。
+- 成功响应：HTTP 200：application/json <code>totalPages</code>、<code>successCount</code>、<code>failCount</code>、<code>skipCount</code>、<code>results</code>、<code>executionTime</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 请提供链接映射规则；HTTP 500: 批量更新链接失败。
 
 ```bash
-curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"dryRun":true,"mappings":[{"oldUrl":"https://example.invalid/old","newUrl":"https://example.invalid/new"}],"newUrl":"REPLACE_NEWURL","useRegex":"REPLACE_USEREGEX"}' "$BASE_URL/api/admin/wiki-links/update"
+curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"dryRun":true,"mappings":[{"oldUrl":"https://example.invalid/old","newUrl":"https://example.invalid/new"}]}' "$BASE_URL/api/admin/wiki-links/update"
 ```
 
 <a id="api-post-api-admin-wiki-links-switch-storage"></a>
@@ -4855,13 +4516,12 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 admin / wiki links / switch storage；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart config: required {；dryRun: optional boolean；externalBaseUrl: optional string；fromStorage: required 'local' | 's3' | 'external'；localBaseUrl: optional string；s3BaseUrl: optional string；toStorage: required 'local' | 's3' | 'external'。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from result</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 请提供源存储和目标存储 / 源存储和目标存储不能相同；HTTP 500: 切换存储策略失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：fromStorage 必填 "local"|"s3"|"external"；toStorage 必填 "local"|"s3"|"external"；config 必填 object；dryRun 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_wiki_links_switch_storage`。
+- 成功响应：HTTP 200：application/json <code>totalPages</code>、<code>successCount</code>、<code>failCount</code>、<code>skipCount</code>、<code>results</code>、<code>executionTime</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 请提供源存储和目标存储 / 源存储和目标存储不能相同；HTTP 500: 切换存储策略失败。
 
 ```bash
-curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"config":"REPLACE_CONFIG","dryRun":true,"externalBaseUrl":"REPLACE_EXTERNALBASEURL","fromStorage":"REPLACE_FROMSTORAGE","localBaseUrl":"REPLACE_LOCALBASEURL","s3BaseUrl":"REPLACE_S3BASEURL","toStorage":"REPLACE_TOSTORAGE"}' "$BASE_URL/api/admin/wiki-links/switch-storage"
+curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"config":{"localBaseUrl":"https://example.invalid/local","s3BaseUrl":"https://example.invalid/s3"},"dryRun":true,"fromStorage":"local","toStorage":"s3"}' "$BASE_URL/api/admin/wiki-links/switch-storage"
 ```
 
 <a id="api-post-api-admin-wiki-links-sync-with-imagemap"></a>
@@ -4870,10 +4530,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 admin / wiki links / sync with imagemap；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart dryRun: required boolean。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>message</code>、<code>result</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 同步 ImageMap 失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：dryRun 必填 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_wiki_links_sync_with_imagemap`。
+- 成功响应：HTTP 200：application/json <code>message</code>、<code>result</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 同步 ImageMap 失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"dryRun":true}' "$BASE_URL/api/admin/wiki-links/sync-with-imagemap"
@@ -4885,10 +4544,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 admin / backup / create；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart note: optional string；validateBody schema backupCreateSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>backup</code>、<code>removedFilenames</code>；HTTP 409: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 409, 500。HTTP 409: 已有备份正在创建，请稍后再试；HTTP 500: DATABASE_URL 格式无效 / 创建备份失败，请查看服务器日志。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：note 可选 string ≤1000 字符。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_backup_create`。
+- 成功响应：HTTP 200：application/json <code>backup</code>、<code>removedFilenames</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 409, 429, 500。HTTP 409: 已有备份正在创建，请稍后再试；HTTP 500: DATABASE_URL 格式无效 / 创建备份失败，请查看服务器日志。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"note":"隔离测试操作"}' "$BASE_URL/api/admin/backup/create"
@@ -4900,10 +4558,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：读取 admin / backup / list；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：由领域 transformer/helper 构造；包装/嵌套模型见第14章，不能假设统一 data。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403。HTTP 401/403 分支；触发条件见领域说明。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_backup_list`。
+- 成功响应：HTTP 200：application/json <code>backups</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 401/403 分支；触发条件见领域说明。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/backup/list"
@@ -4915,28 +4572,26 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/backup/list"
 
 - 用途：创建/提交/触发 admin / backup / note；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path filename: required string path parameter；query 无 query 字段；body/multipart note: required string；validateBody schema backupNoteSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>note</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 无效的文件名；HTTP 404: 备份文件不存在；HTTP 500: 更新备份备注失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path filename 必填 string；query 无；application/json：note 必填 string ≤1000 字符。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_backup_filename_note`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>note</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 无效的文件名；HTTP 404: 备份文件不存在；HTTP 500: 更新备份备注失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"note":"隔离测试操作"}' "$BASE_URL/api/admin/backup/REPLACE_FILENAME/note"
 ```
 
-<a id="api-post-api-admin-backup-filename-download"></a>
+<a id="api-get-api-admin-backup-filename-download"></a>
 
-### POST /api/admin/backup/:filename/download
+### GET /api/admin/backup/:filename/download
 
 - 用途：创建/提交/触发 admin / backup / download；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path filename: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：JSON by format branch or file stream; download Content-Type/CSV are described in the domain section。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 无效的文件名；HTTP 404: 备份文件不存在；HTTP 500: 下载备份失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path filename 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_backup_filename_download`。
+- 成功响应：HTTP 200：application/zip 附件或文件正文。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 无效的文件名；HTTP 404: 备份文件不存在；HTTP 500: 下载备份失败。
 
 ```bash
-curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/backup/REPLACE_FILENAME/download"
+curl --fail-with-body -X GET -H "$AUTH_HEADER" "$BASE_URL/api/admin/backup/REPLACE_FILENAME/download"
 ```
 
 <a id="api-post-api-admin-backup-restore"></a>
@@ -4945,10 +4600,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/backup/REPL
 
 - 用途：创建/提交/触发 admin / backup / restore；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart confirm: required boolean；password: optional string；validateBody schema backupRestoreSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>、<code>success</code>、<code>message</code>、<code>mediaReport</code>、<code>mediaReportError</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 恢复操作需要二次确认，请传入 confirm: true / 请上传备份文件；HTTP 500: DATABASE_URL 格式无效。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；multipart/form-data：confirm 必填 true；password 可选 string；file 必填 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_backup_restore`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>message</code>、<code>mediaReport</code>、<code>mediaReportError</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500, default。HTTP 400: 恢复操作需要二次确认，请传入 confirm: true / 请上传备份文件；HTTP 500: DATABASE_URL 格式无效。
 
 ```bash
 # Isolated environment only: replaces the database
@@ -4961,28 +4615,26 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -F 'file=@./approved-test-backup
 
 - 用途：创建/提交/触发 admin / backup / restore；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path filename: required string path parameter；query 无 query 字段；body/multipart confirm: required boolean；password: optional string；validateBody schema backupRestoreSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>、<code>success</code>、<code>message</code>、<code>mediaReport</code>、<code>mediaReportError</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 恢复操作需要二次确认，请传入 confirm: true / 无效的文件名；HTTP 404: 备份文件不存在；HTTP 500: DATABASE_URL 格式无效。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path filename 必填 string；query 无；application/json：confirm 必填 true；password 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_backup_filename_restore`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>message</code>、<code>mediaReport</code>、<code>mediaReportError</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500, default。HTTP 400: 恢复操作需要二次确认，请传入 confirm: true / 无效的文件名；HTTP 404: 备份文件不存在；HTTP 500: DATABASE_URL 格式无效。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"confirm":true,"password":"REPLACE_WITH_TEST_PASSWORD"}' "$BASE_URL/api/admin/backup/REPLACE_FILENAME/restore"
 ```
 
-<a id="api-post-api-admin-backup-media-reports-filename-download"></a>
+<a id="api-get-api-admin-backup-media-reports-filename-download"></a>
 
-### POST /api/admin/backup/media-reports/:filename/download
+### GET /api/admin/backup/media-reports/:filename/download
 
 - 用途：创建/提交/触发 admin / backup / media reports；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path filename: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：JSON by format branch or file stream; download Content-Type/CSV are described in the domain section。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 无效的文件名；HTTP 404: 图片清单不存在；HTTP 500: 下载图片清单失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path filename 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_backup_media_reports_filename_download`。
+- 成功响应：HTTP 200：application/json <code>generatedAt</code>、<code>restoreSource</code>、<code>uploadsDir</code>、<code>summary</code>、<code>missingFiles</code>、<code>orphanFiles</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 无效的文件名；HTTP 404: 图片清单不存在；HTTP 500: 下载图片清单失败。
 
 ```bash
-curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/backup/media-reports/REPLACE_FILENAME/download"
+curl --fail-with-body -X GET -H "$AUTH_HEADER" "$BASE_URL/api/admin/backup/media-reports/REPLACE_FILENAME/download"
 ```
 
 <a id="api-post-api-admin-backup-filename-delete"></a>
@@ -4991,10 +4643,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/backup/medi
 
 - 用途：创建/提交/触发 admin / backup / delete；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path filename: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：由领域 transformer/helper 构造；包装/嵌套模型见第14章，不能假设统一 data。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403。HTTP 401/403 分支；触发条件见领域说明。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path filename 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_backup_filename_delete`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 401/403 分支；触发条件见领域说明。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/backup/REPLACE_FILENAME/delete"
@@ -5006,13 +4657,12 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/backup/REPL
 
 - 用途：创建/提交/触发 admin / wiki categories；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart description: optional string；id: optional string；name: optional string；order: optional number；requiresAdminEdit: optional boolean。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 201: <code>category</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：201, 400, 401, 403, 500。HTTP 400: 分类 ID 和名称不能为空；HTTP 500: 创建百科分类失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：id 可选 string；name 可选 string；description 可选 string；order 可选 number；requiresAdminEdit 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_wiki_categories`。
+- 成功响应：HTTP 201：application/json <code>category</code>。
+- HTTP 状态/失败：201, 400, 401, 403, 429, 500。HTTP 400: 分类 ID 和名称不能为空；HTTP 500: 创建百科分类失败。
 
 ```bash
-curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"description":"文档测试说明","id":"REPLACE_ID","name":"文档测试名称","order":20,"requiresAdminEdit":"REPLACE_REQUIRESADMINEDIT"}' "$BASE_URL/api/admin/wiki-categories"
+curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"description":"文档测试说明","id":"REPLACE_ID","name":"文档测试名称","order":20,"requiresAdminEdit":false}' "$BASE_URL/api/admin/wiki-categories"
 ```
 
 <a id="api-patch-api-admin-wiki-categories-id"></a>
@@ -5021,13 +4671,12 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：部分更新 admin / wiki categories；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；query 无 query 字段；body/multipart description: optional string；name: optional string；order: optional number；requiresAdminEdit: optional boolean。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>category</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 分类名称不能为空；HTTP 500: 更新百科分类失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path id 必填 string；query 无；application/json：name 可选 string；description 可选 string；order 可选 number；requiresAdminEdit 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_admin_wiki_categories_id`。
+- 成功响应：HTTP 200：application/json <code>category</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 分类名称不能为空；HTTP 500: 更新百科分类失败。
 
 ```bash
-curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"description":"文档测试说明","name":"文档测试名称","order":20,"requiresAdminEdit":"REPLACE_REQUIRESADMINEDIT"}' "$BASE_URL/api/admin/wiki-categories/REPLACE_ID"
+curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"description":"文档测试说明","name":"文档测试名称","order":20,"requiresAdminEdit":false}' "$BASE_URL/api/admin/wiki-categories/REPLACE_ID"
 ```
 
 <a id="api-get-api-admin-tab"></a>
@@ -5036,10 +4685,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：读取 admin；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path tab: required string path parameter；query includeDeleted?:string, only literal true includes; page/limit default1/20 clamp to shared ranges; music/albums may use sortBy allowed columns and sortOrder=asc|desc；body/multipart 此处理器不读取 JSON body；解析 schema admin tab list query。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>data</code>、<code>nested DTO fields</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toWikiResponse、toPostResponse、toGalleryResponse、toTicketListingListResponse、toEventListResponse、toMusicResponse、toAlbumResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 未知数据类型；HTTP 500: 获取管理数据失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path tab 必填 wiki|posts|galleries|ticket-listings|events|users|music|albums|announcements|sections|wiki-categories；query sortBy 可选 string；sortOrder 可选 string；page 可选 integer，默认 1；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_tab`。
+- 成功响应：HTTP 200：application/json <code>data</code>、<code>total</code>、<code>page</code>、<code>limit</code>、<code>totalPages</code>、<code>hasMore</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 未知数据类型；HTTP 500: 获取管理数据失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/REPLACE_TAB?page=1&limit=20"
@@ -5051,10 +4699,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/REPLACE_TAB?page=1&
 
 - 用途：读取 admin；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；tab: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>item</code>；HTTP 400: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>；DTO transformer toWikiResponse、toPostResponse、toGalleryResponse、toTicketListingResponse、toEventResponse、toUserResponse、toEditLockResponse。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 未知数据类型；HTTP 404: 记录不存在；HTTP 500: 获取详情失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path tab 必填 wiki|posts|galleries|ticket-listings|events|users|locks；id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_tab_id`。
+- 成功响应：HTTP 200：application/json <code>item</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 未知数据类型；HTTP 404: 记录不存在；HTTP 500: 获取详情失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/REPLACE_TAB/REPLACE_ID"
@@ -5066,10 +4713,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/REPLACE_TAB/REPLACE
 
 - 用途：删除/移除 admin；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；tab: required string path parameter；query 无 query 字段；body/multipart reason?:string; required only for resource branches deleting another owner/moderation record; user self-delete forbidden；解析 schema per-resource admin delete body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 删除理由不能为空 / 不能删除自己 / 未知删除类型；HTTP 403: 只能删除普通用户；HTTP 404: 页面不存在 / 帖子不存在 / 图集不存在 / 盘票信息不存在 / 活动不存在 / 专辑不存在 / 用户不存在；HTTP 500: 删除失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path tab 必填 wiki|posts|galleries|ticket-listings|events|music|albums|announcements|sections|wiki-categories|image-maps|users|locks；id 必填 string；query 无；application/json：reason 必填 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_admin_tab_id`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 删除理由不能为空 / 不能删除自己 / 未知删除类型；HTTP 403: 只能删除普通用户；HTTP 404: 页面不存在 / 帖子不存在 / 图集不存在 / 盘票信息不存在 / 活动不存在 / 专辑不存在 / 用户不存在；HTTP 500: 删除失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"reason":"隔离测试原因"}' "$BASE_URL/api/admin/REPLACE_TAB/REPLACE_ID"
@@ -5081,10 +4727,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" -H 'Content-Type: application/
 
 - 用途：创建/提交/触发 admin / restore；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；tab: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 该记录未被删除 / 未知恢复类型；HTTP 403: 无权恢复该用户；HTTP 404: 百科不存在 / 帖子不存在 / 图集不存在 / 盘票信息不存在 / 活动不存在 / 歌曲不存在 / 专辑不存在 / 公告不存在 / 版块不存在 / 分类不存在 / 图片映射不存在 / 用户不存在；HTTP 500: 恢复失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path tab 必填 wiki|posts|galleries|ticket-listings|events|music|albums|announcements|sections|wiki-categories|image-maps|users；id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_tab_id_restore`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 该记录未被删除 / 未知恢复类型；HTTP 403: 无权恢复该用户；HTTP 404: 百科不存在 / 帖子不存在 / 图集不存在 / 盘票信息不存在 / 活动不存在 / 歌曲不存在 / 专辑不存在 / 公告不存在 / 版块不存在 / 分类不存在 / 图片映射不存在 / 用户不存在；HTTP 500: 恢复失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/REPLACE_TAB/REPLACE_ID/restore"
@@ -5096,10 +4741,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/REPLACE_TAB
 
 - 用途：删除/移除 admin / permanent；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path id: required string path parameter；tab: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 400: <code>error</code>；HTTP 403: <code>error</code>；HTTP 404: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 404, 500。HTTP 400: 请先软删除专辑 / 不能删除自己 / 未知彻底删除类型；HTTP 403: 无权彻底删除该用户；HTTP 404: 记录不存在 / 图集不存在 / 盘票信息不存在 / 活动不存在 / 歌曲不存在 / 专辑不存在 / 图片映射不存在 / 用户不存在；HTTP 500: 彻底删除失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path tab 必填 wiki|posts|galleries|ticket-listings|events|music|albums|announcements|sections|wiki-categories|image-maps|users；id 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_admin_tab_id_permanent`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 404, 429, 500。HTTP 400: 请先软删除专辑 / 不能删除自己 / 未知彻底删除类型；HTTP 403: 无权彻底删除该用户；HTTP 404: 记录不存在 / 图集不存在 / 盘票信息不存在 / 活动不存在 / 歌曲不存在 / 专辑不存在 / 图片映射不存在 / 用户不存在；HTTP 500: 彻底删除失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/admin/REPLACE_TAB/REPLACE_ID/permanent"
@@ -5111,10 +4755,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/admin/REPLACE_T
 
 - 用途：读取 admin / media health / scan；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query mode handler-supported; limit integer(default scan cap); result returns scan summary；body/multipart 此处理器不读取 JSON body；解析 schema media health scan。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403。HTTP 400/401/403 分支；触发条件见领域说明。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query mode 可选 string；limit 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_media_health_scan`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>。
+- HTTP 状态/失败：200, 401, 403, 429。HTTP 400/401/403 分支；触发条件见领域说明。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/media-health/scan?limit=100"
@@ -5126,10 +4769,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/media-health/scan?l
 
 - 用途：创建/提交/触发 admin / media health / cleanup；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart targets array of {recordType:mediaAsset|imageMap,id:nonempty string}, first100 valid items; mode dry-run|apply；解析 schema manual media health parser。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>；HTTP 400: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403。HTTP 400: 请选择要清理的媒体记录。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：targets 可选 object[]；mode 可选 string。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_media_health_cleanup`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429。HTTP 400: 请选择要清理的媒体记录。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"targets":[{"recordType":"imageMap","id":"REPLACE_WITH_IMAGE_MAP_ID"}],"mode":"dry-run"}' "$BASE_URL/api/admin/media-health/cleanup"
@@ -5141,10 +4783,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：读取 admin / dashboard；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>、<code>timestamp</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取仪表盘数据失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_dashboard`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取仪表盘数据失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/dashboard"
@@ -5156,10 +4797,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/dashboard"
 
 - 用途：读取 admin / rate limits / config；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>、<code>timestamp</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取请求限流配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_rate_limits_config`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取请求限流配置失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/rate-limits/config"
@@ -5171,10 +4811,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/rate-limits/config"
 
 - 用途：部分更新 admin / rate limits / config；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart partial JSON object; only 10 known buckets; bucket keys enabled/windowMs/max/message; windowMs integer1000–86400000, max integer1–100000, message1–120；解析 schema RateLimitAdminConfigUpdate。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>、<code>timestamp</code>；HTTP 400: <code>success</code>、<code>error</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 500: 更新请求限流配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json 配置对象。字段及嵌套结构见 [OpenAPI 规范](/openapi.json) 的 `patch_api_admin_rate_limits_config`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 500: 更新请求限流配置失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{}' "$BASE_URL/api/admin/rate-limits/config"
@@ -5186,10 +4825,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：创建/提交/触发 admin / rate limits / config；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>、<code>timestamp</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 重置请求限流配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_rate_limits_config_reset`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 重置请求限流配置失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/rate-limits/config/reset"
@@ -5201,10 +4839,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/rate-limits
 
 - 用途：读取 admin / runtime config；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>、<code>timestamp</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取运行时配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_runtime_config`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取运行时配置失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/runtime-config"
@@ -5216,10 +4853,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/runtime-config"
 
 - 用途：部分更新 admin / runtime config；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart JSON object; bool values must boolean; numbers finite/clamped; strings trimmed; unknown keys ignored; full per-key ranges in chapter14；解析 schema Partial<RuntimeConfig>。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>、<code>timestamp</code>；HTTP 400: <code>success</code>、<code>error</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 500: 更新运行时配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：semanticSearchEnabled 可选 boolean；galleryAdminOnly 可选 boolean；allowSuperAdminManageSuperAdmins 可选 boolean；turnstileEnabled 可选 boolean；blurhashEnabled 可选 boolean；blurhashAutoGenerate 可选 boolean；blurhashComponentsX 可选 number；blurhashComponentsY 可选 number；uploadSessionTtlMinutes 可选 number；backupRetainCount 可选 number；playUrlCacheTtlSeconds 可选 number；cacheMaxKeys 可选 number；qdrantTimeoutMs 可选 number；imageEmbeddingBatchSize 可选 number；editLockCleanupIntervalMs 可选 number；mediaCleanupIntervalMs 可选 number；variantMaxConcurrent 可选 number；variantTaskTimeoutMs 可选 number；variantQueueMaxWaitMs 可选 number；variantSharpMemoryLimitMb 可选 number；variantMaxRetries 可选 number；cloudSyncMaxConcurrent 可选 number；cloudSyncMaxRetries 可选 number；logLevel 可选 debug|info|warn|error；s3Enabled 可选 boolean；s3PublicBucketName 可选 string；s3PublicBucketRegion 可选 string；s3PublicBucketPrefix 可选 string；s3PrivateBucketName 可选 string；s3PrivateBucketRegion 可选 string；s3EndpointUrl 可选 string；s3ForcePathStyle 可选 boolean；s3SslEnabled 可选 boolean；s3SignatureVersion 可选 "v4"；s3PublicDomain 可选 string；s3DefaultAcl 可选 string；s3ExpiresIn 可选 number；s3MaxFileSize 可选 number；s3AllowedContentTypes 可选 string；s3EnableMd5Verification 可选 boolean；qdrantUrl 可选 string；qdrantCollection 可选 string；qdrantTextCollection 可选 string；lskyBaseUrl 可选 string；lskyStrategyId 可选 string；lskyTimeout 可选 number。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_admin_runtime_config`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 500: 更新运行时配置失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{}' "$BASE_URL/api/admin/runtime-config"
@@ -5231,10 +4867,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：创建/提交/触发 admin / runtime config / reset；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>、<code>timestamp</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 重置运行时配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_runtime_config_reset`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 重置运行时配置失败。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/runtime-config/reset"
@@ -5246,10 +4881,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/runtime-con
 
 - 用途：读取 admin / secrets config；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取服务凭证配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_secrets_config`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取服务凭证配置失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/secrets-config"
@@ -5261,10 +4895,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/secrets-config"
 
 - 用途：部分更新 admin / secrets config；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart JSON object, only known credential names; values string|null; omitted unchanged; null/empty clears; response only exposes configured/last4；解析 schema Partial<SecretsConfig>。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>、<code>timestamp</code>；HTTP 400: <code>success</code>、<code>error</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 未配置 SECRETS_ENCRYPTION_KEY，无法管理凭证 / 请求体必须是对象；HTTP 500: 更新服务凭证失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：superbedApiToken 可选 string|null；amapApiKey 可选 string|null；qdrantApiKey 可选 string|null；lskyToken 可选 string|null；s3ReadAccessKeyId 可选 string|null；s3ReadSecretAccessKey 可选 string|null；s3WriteAccessKeyId 可选 string|null；s3WriteSecretAccessKey 可选 string|null；wechatMpAppId 可选 string|null；wechatMpAppSecret 可选 string|null；turnstileSiteKey 可选 string|null；turnstileSecretKey 可选 string|null。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_admin_secrets_config`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 未配置 SECRETS_ENCRYPTION_KEY，无法管理凭证 / 请求体必须是对象；HTTP 500: 更新服务凭证失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{}' "$BASE_URL/api/admin/secrets-config"
@@ -5276,10 +4909,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：读取 admin / disk / status；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>、<code>timestamp</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: Failed to get disk status。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_disk_status`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: Failed to get disk status。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/disk/status"
@@ -5291,10 +4923,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/disk/status"
 
 - 用途：读取 admin / disk / config；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>、<code>timestamp</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: Failed to get disk monitor configuration。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_disk_config`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: Failed to get disk monitor configuration。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/disk/config"
@@ -5306,10 +4937,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/disk/config"
 
 - 用途：更新/执行 admin / disk / config；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart warningThresholdGB/criticalThresholdGB positive; critical < warning; checkIntervalMs>=60000; uploadsMinFreeMB>=10; each optional；解析 schema disk config partial object。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>message</code>、<code>data</code>、<code>previousConfig</code>、<code>timestamp</code>；HTTP 400: <code>success</code>、<code>error</code>、<code>details</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: Request body must be a JSON object / Validation failed / criticalThresholdGB must be less than warningThresholdGB；HTTP 500: Failed to update disk monitor configuration。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：warningThresholdGB 可选 number；criticalThresholdGB 可选 number；checkIntervalMs 可选 number，最小 60000；uploadsMinFreeMB 可选 number，最小 10。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `put_api_admin_disk_config`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>message</code>、<code>data</code>、<code>previousConfig</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: Request body must be a JSON object / Validation failed / criticalThresholdGB must be less than warningThresholdGB；HTTP 500: Failed to update disk monitor configuration。
 
 ```bash
 curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{}' "$BASE_URL/api/admin/disk/config"
@@ -5321,10 +4951,9 @@ curl --fail-with-body -X PUT -H "$AUTH_HEADER" -H 'Content-Type: application/jso
 
 - 用途：创建/提交/触发 admin / disk / config；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>message</code>、<code>data</code>、<code>timestamp</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: Failed to reset configuration。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_disk_config_reset`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>message</code>、<code>data</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: Failed to reset configuration。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/disk/config/reset"
@@ -5336,10 +4965,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/disk/config
 
 - 用途：创建/提交/触发 admin / disk / check；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>message</code>、<code>data</code>、<code>timestamp</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: Manual disk check failed。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_disk_check`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>message</code>、<code>data</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: Manual disk check failed。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/disk/check"
@@ -5351,10 +4979,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/disk/check"
 
 - 用途：创建/提交/触发 admin / disk / monitor；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>message</code>、<code>timestamp</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: Failed to stop monitoring。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_disk_monitor_stop`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>message</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: Failed to stop monitoring。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/disk/monitor/stop"
@@ -5366,10 +4993,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/disk/monito
 
 - 用途：创建/提交/触发 admin / disk / monitor；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>message</code>、<code>timestamp</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: Failed to resume monitoring。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_disk_monitor_resume`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>message</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: Failed to resume monitoring。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/disk/monitor/resume"
@@ -5381,10 +5007,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" "$BASE_URL/api/admin/disk/monito
 
 - 用途：读取 admin / variants / stats；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>、<code>timestamp</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: Failed to get variant generator stats。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_variants_stats`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: Failed to get variant generator stats。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/variants/stats"
@@ -5396,10 +5021,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/variants/stats"
 
 - 用途：读取 admin / cloud sync / stats；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>、<code>lskyProAvailable</code>、<code>timestamp</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: Failed to get cloud sync stats。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_cloud_sync_stats`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>、<code>lskyProAvailable</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: Failed to get cloud sync stats。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/cloud-sync/stats"
@@ -5411,10 +5035,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/cloud-sync/stats"
 
 - 用途：创建/提交/触发 admin / rebuild all variants；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart type=imageMap|songCover|albumCover|all(default imageMap); scope=all|failed|missing|outdated(default missing); batchSize integer1–1000(default50); dryRun/force:boolean；解析 schema rebuild variants request。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>jobId</code>、<code>status</code>、<code>summary</code>、<code>message</code>、<code>timestamp</code>、<code>nested DTO fields</code>；HTTP 400: <code>success</code>、<code>error</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: batchSize must be an integer between 1 and 1000 / dryRun and force must be boolean values；HTTP 500: Failed to initiate variant rebuild。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：type 可选 "imageMap"|"songCover"|"albumCover"|"all"；scope 可选 "all"|"failed"|"missing"|"outdated"；batchSize 可选 number；dryRun 必填 boolean；force 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_admin_rebuild_all_variants`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>jobId</code>、<code>status</code>、<code>summary</code>、<code>message</code>、<code>timestamp</code>、<code>estimatedTimeSeconds</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: batchSize must be an integer between 1 and 1000 / dryRun and force must be boolean values；HTTP 500: Failed to initiate variant rebuild。
 
 ```bash
 # Resource-intensive or external side effect; use only in an isolated service environment.
@@ -5427,10 +5050,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：读取 admin / rebuild status；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path jobId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>jobId</code>、<code>status</code>、<code>queueLength</code>、<code>processingCount</code>、<code>completedToday</code>、<code>failedToday</code>、<code>timestamp</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403。HTTP 401/403 分支；触发条件见领域说明。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path jobId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_rebuild_status_jobId`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>jobId</code>、<code>status</code>、<code>queueLength</code>、<code>processingCount</code>、<code>completedToday</code>、<code>failedToday</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 401, 403, 429。HTTP 401/403 分支；触发条件见领域说明。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/rebuild-status/REPLACE_JOBID"
@@ -5442,10 +5064,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/rebuild-status/REPL
 
 - 用途：读取 admin / cleanup / stats；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>data</code>、<code>timestamp</code>；HTTP 500: <code>success</code>、<code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: Failed to get variant statistics。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_admin_cleanup_stats`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>data</code>、<code>timestamp</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: Failed to get variant statistics。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/cleanup/stats"
@@ -5457,10 +5078,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/admin/cleanup/stats"
 
 - 用途：读取 config / gallery access；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>adminOnly</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取图集权限配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_config_gallery_access`。
+- 成功响应：HTTP 200：application/json <code>adminOnly</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取图集权限配置失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/config/gallery-access"
@@ -5472,13 +5092,26 @@ curl --fail-with-body "$BASE_URL/api/config/gallery-access"
 
 - 用途：读取 config / features；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>semanticSearch</code>、<code>registrationEnabled</code>、<code>searchHotKeywordsEnabled</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取站点功能配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_config_features`。
+- 成功响应：HTTP 200：application/json <code>semanticSearch</code>、<code>registrationEnabled</code>、<code>searchHotKeywordsEnabled</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取站点功能配置失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/config/features"
+```
+
+<a id="api-get-api-config-turnstile"></a>
+
+### GET /api/config/turnstile
+
+- 用途：读取 站点配置。
+- 权限：公开，可选 Bearer 身份。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_config_turnstile`。
+- 成功响应：HTTP 200：application/json <code>enabled</code>、<code>siteKey</code>。
+- HTTP 状态/失败：200, 401, 429, 500。无效密钥返回 401，限流返回 429。
+
+```bash
+curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/turnstile"
 ```
 
 <a id="api-get-api-config-admin-permissions"></a>
@@ -5487,10 +5120,9 @@ curl --fail-with-body "$BASE_URL/api/config/features"
 
 - 用途：读取 config / admin permissions；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>allowSuperAdminRoleChanges</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取后台权限配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_config_admin_permissions`。
+- 成功响应：HTTP 200：application/json <code>allowSuperAdminRoleChanges</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取后台权限配置失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/admin-permissions"
@@ -5502,10 +5134,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/admin-permissions"
 
 - 用途：读取 config / registration / admin；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from config</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取注册配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_config_registration_admin`。
+- 成功响应：HTTP 200：application/json <code>enabled</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取注册配置失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/registration/admin"
@@ -5517,10 +5148,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/registration/admin
 
 - 用途：部分更新 config / registration；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart enabled:boolean required；解析 schema feature toggle。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>config</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: enabled 必须是布尔值；HTTP 500: 更新注册配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：enabled 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_config_registration`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>config</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: enabled 必须是布尔值；HTTP 500: 更新注册配置失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"enabled":false}' "$BASE_URL/api/config/registration"
@@ -5532,10 +5162,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：读取 config / search hot keywords / admin；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from config</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取搜索热词配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_config_search_hot_keywords_admin`。
+- 成功响应：HTTP 200：application/json <code>enabled</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取搜索热词配置失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/search-hot-keywords/admin"
@@ -5547,10 +5176,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/search-hot-keyword
 
 - 用途：部分更新 config / search hot keywords；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart enabled:boolean required；解析 schema feature toggle。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>config</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: enabled 必须是布尔值；HTTP 500: 更新搜索热词配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：enabled 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_config_search_hot_keywords`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>config</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: enabled 必须是布尔值；HTTP 500: 更新搜索热词配置失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"enabled":false}' "$BASE_URL/api/config/search-hot-keywords"
@@ -5562,10 +5190,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：读取 config / email verification；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from toEmailVerificationPublicConfig(config)</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取邮箱验证配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_config_email_verification`。
+- 成功响应：HTTP 200：application/json <code>enabled</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取邮箱验证配置失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/config/email-verification"
@@ -5577,10 +5204,9 @@ curl --fail-with-body "$BASE_URL/api/config/email-verification"
 
 - 用途：读取 config / email verification / admin；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from toEmailVerificationAdminConfig(config)</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取邮箱验证配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_config_email_verification_admin`。
+- 成功响应：HTTP 200：application/json <code>enabled</code>、<code>publicBaseUrl</code>、<code>tokenTtlMinutes</code>、<code>smtpHost</code>、<code>smtpPort</code>、<code>smtpSecure</code>、<code>smtpUser</code>、<code>smtpFrom</code>、<code>verificationSubject</code>、<code>verificationTextBody</code>、<code>verificationHtmlBody</code>、<code>resetSubject</code>、<code>resetTextBody</code>、<code>resetHtmlBody</code>、<code>smtpPassSet</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取邮箱验证配置失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/email-verification/admin"
@@ -5592,10 +5218,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/email-verification
 
 - 用途：部分更新 config / email verification；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：超级管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart enabled:boolean and smtpSecure:boolean required; publicBaseUrl/smtpHost/smtpUser/smtpFrom/smtpPass, smtpPort, tokenTtlMinutes and templates optional; TTL5–10080 minutes, port1–65535; clearSmtpPass:true clears credential；解析 schema email verification settings。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>config</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: enabled 必须是布尔值 / smtpSecure 必须是布尔值 / 验证链接有效期必须是 5 到 10080 分钟之间的整数 / SMTP 端口必须是 1 到 65535 之间的整数 / 站点公网地址必须使用 http 或 https / 站点公网地址格式无效 / 启用邮箱验证前请配置站点公网地址、SMTP Host 和发件人；HTTP 500: 更新邮箱验证配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：enabled 必填 boolean；publicBaseUrl 可选 string；tokenTtlMinutes 必填 integer，最小 5，最大 10080；smtpHost 可选 string；smtpPort 必填 integer，最小 1，最大 65535；smtpSecure 必填 boolean；smtpUser 可选 string；smtpPass 可选 string；smtpFrom 可选 string；verificationSubject 可选 string；verificationTextBody 可选 string；verificationHtmlBody 可选 string；resetSubject 可选 string；resetTextBody 可选 string；resetHtmlBody 可选 string；clearSmtpPass 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_config_email_verification`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>config</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: enabled 必须是布尔值 / smtpSecure 必须是布尔值 / 验证链接有效期必须是 5 到 10080 分钟之间的整数 / SMTP 端口必须是 1 到 65535 之间的整数 / 站点公网地址必须使用 http 或 https / 站点公网地址格式无效 / 启用邮箱验证前请配置站点公网地址、SMTP Host 和发件人；HTTP 500: 更新邮箱验证配置失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"enabled":false,"smtpSecure":false,"publicBaseUrl":"https://example.invalid","tokenTtlMinutes":60,"smtpHost":"smtp.example.invalid","smtpPort":587,"smtpFrom":"noreply@example.invalid"}' "$BASE_URL/api/config/email-verification"
@@ -5607,10 +5232,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：读取 config / image preference；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from cached</code>、<code>response from preference</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 500。HTTP 500: 获取图片偏好设置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_config_image_preference`。
+- 成功响应：HTTP 200：application/json <code>strategy</code>、<code>fallback</code>。
+- HTTP 状态/失败：200, 401, 429, 500。HTTP 500: 获取图片偏好设置失败。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/config/image-preference"
@@ -5622,10 +5246,9 @@ curl --fail-with-body "$BASE_URL/api/config/image-preference"
 
 - 用途：部分更新 config / image preference；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart autoSync: optional boolean；fallback: optional boolean；strategy: optional 'local' | 's3' | 'external'。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>preference</code>、<code>syncTask</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 更新图片偏好设置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：strategy 可选 "local"|"s3"|"external"；fallback 可选 boolean；autoSync 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `patch_api_config_image_preference`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>preference</code>、<code>syncTask</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 更新图片偏好设置失败。
 
 ```bash
 curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"autoSync":true,"fallback":true,"strategy":"local"}' "$BASE_URL/api/config/image-preference"
@@ -5637,10 +5260,9 @@ curl --fail-with-body -X PATCH -H "$AUTH_HEADER" -H 'Content-Type: application/j
 
 - 用途：读取 config / image sync；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query taskId: optional string；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>task</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取同步状态失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query taskId 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_config_image_sync`。
+- 成功响应：HTTP 200：application/json <code>task</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取同步状态失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/image-sync?taskId=REPLACE_VALUE"
@@ -5652,10 +5274,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/image-sync?taskId=
 
 - 用途：创建/提交/触发 config / image sync；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart strategy: required 's3' | 'external'。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>、<code>task</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 请指定有效的同步策略: s3 或 external。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：strategy 必填 "s3"|"external"。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_config_image_sync`。
+- 成功响应：HTTP 200：application/json <code>success</code>、<code>task</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 请指定有效的同步策略: s3 或 external。
 
 ```bash
 curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/json' --data '{"strategy":"local"}' "$BASE_URL/api/config/image-sync"
@@ -5667,10 +5288,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：删除/移除 config / image sync；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path taskId: required string path parameter；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>success</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 任务不存在或已完成/失败；HTTP 500: 取消同步任务失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path taskId 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `delete_api_config_image_sync_taskId`。
+- 成功响应：HTTP 200：application/json <code>success</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 任务不存在或已完成/失败；HTTP 500: 取消同步任务失败。
 
 ```bash
 curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/config/image-sync/REPLACE_TASKID"
@@ -5682,10 +5302,9 @@ curl --fail-with-body -X DELETE -H "$AUTH_HEADER" "$BASE_URL/api/config/image-sy
 
 - 用途：读取 config / s3 / config；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from config</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取 S3 配置失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_config_s3_config`。
+- 成功响应：HTTP 200：application/json <code>enabled</code>、<code>endpoint</code>、<code>bucket</code>、<code>prefix</code>、<code>publicDomain</code>、<code>maxFileSize</code>、<code>allowedContentTypes</code>、<code>md5Required</code>、<code>s3BaseUrl</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取 S3 配置失败。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/s3/config"
@@ -5697,10 +5316,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/s3/config"
 
 - 用途：读取 config / s3 / presign upload；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：已认证且未封禁。
-- 参数契约：path 无 path 字段；query filename required string; contentType?:MIME; contentMd5?:32 hex; fileSize?:positive integer；body/multipart 此处理器不读取 JSON body；解析 schema S3 upload signature request。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>response from result</code>、<code>error</code>；HTTP 400: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403。HTTP 400: 缺少 filename 参数。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query filename 可选 string；contentType 可选 string；contentMd5 可选 string；fileSize 可选 string；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_config_s3_presign_upload`。
+- 成功响应：HTTP 200：application/json <code>uploadUrl</code>、<code>url</code>、<code>key</code>、<code>expiresIn</code>、<code>md5Required</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, default。HTTP 400: 缺少 filename 参数。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/s3/presign-upload?filename=test.png&contentType=image%2Fpng&fileSize=1"
@@ -5712,10 +5330,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/s3/presign-upload?
 
 - 用途：读取 config / s3 / presign download；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：已认证。
-- 参数契约：path key: required string path parameter；query 无 query 字段；body/multipart body 按 S3 object key 校验；解析 schema S3 object key。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>downloadUrl</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 缺少 key 参数。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path key 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_config_s3_presign_download_key`。
+- 成功响应：HTTP 200：application/json <code>downloadUrl</code>。
+- HTTP 状态/失败：200, 400, 401, 429, 500。HTTP 400: 缺少 key 参数。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/s3/presign-download/example/key"
@@ -5727,10 +5344,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/s3/presign-downloa
 
 - 用途：读取 config / s3 / presign delete；目标资源与完整业务约束见第 14 章「管理后台与系统配置」。
 - 权限：管理员。
-- 参数契约：path key: required string path parameter；query 无 query 字段；body/multipart body 按 S3 object key 校验；解析 schema S3 object key。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>deleteUrl</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 缺少 key 参数。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path key 必填 string；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_config_s3_presign_delete_key`。
+- 成功响应：HTTP 200：application/json <code>deleteUrl</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 缺少 key 参数。
 
 ```bash
 curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/s3/presign-delete/example/key"
@@ -5760,10 +5376,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/config/s3/presign-delete/
 
 - 用途：读取 embeddings / status；目标资源与完整业务约束见第 15 章「语义检索与运维任务」。
 - 权限：管理员；仅条件开关开启时注册。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>modelName</code>、<code>vectorSize</code>、<code>qdrantCollection</code>、<code>modelCacheDir</code>、<code>modelLoaded</code>、<code>textModelLoaded</code>、<code>tokenizerLoaded</code>、<code>modelErrors</code>、<code>usingModelScope</code>、<code>actualDtype</code>、<code>summary</code>、<code>imageSourceAvailability</code>、<code>imageEmbeddingReady</code>、<code>imageEmbeddingTableMissing</code>、<code>imageEmbeddingWarning</code>、<code>textSummary</code>、<code>textEmbeddingReady</code>、<code>textEmbeddingTableMissing</code>、<code>textEmbeddingWarning</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取向量状态失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_embeddings_status`。
+- 成功响应：HTTP 200：application/json <code>modelName</code>、<code>vectorSize</code>、<code>qdrantCollection</code>、<code>modelCacheDir</code>、<code>modelLoaded</code>、<code>textModelLoaded</code>、<code>tokenizerLoaded</code>、<code>modelErrors</code>、<code>usingModelScope</code>、<code>actualDtype</code>、<code>summary</code>、<code>imageSourceAvailability</code>、<code>imageEmbeddingReady</code>、<code>imageEmbeddingTableMissing</code>、<code>imageEmbeddingWarning</code>、<code>textSummary</code>、<code>textEmbeddingReady</code>、<code>textEmbeddingTableMissing</code>、<code>textEmbeddingWarning</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取向量状态失败。
 
 ```bash
 # Resource-intensive or external side effect; use only in an isolated service environment.
@@ -5776,10 +5391,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/embeddings/status"
 
 - 用途：创建/提交/触发 embeddings / enqueue missing；目标资源与完整业务约束见第 15 章「语义检索与运维任务」。
 - 权限：管理员；仅条件开关开启时注册。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart type=gallery|wiki|post|all(default all); limit integer1–2000(default runtime imageEmbeddingBatchSize); sync-batch additionally galleryImageIds/includeFailed/forceRebuild；解析 schema manual image embedding parser；数值/布尔解析 limit: integer; default getImageEmbeddingBatchSize(。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>limit</code>、<code>type</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 500: 补齐向量队列失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：type 可选 string；limit 可选 integer。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_embeddings_enqueue_missing`。
+- 成功响应：HTTP 200：application/json <code>gallery</code>、<code>wiki</code>、<code>post</code>、<code>limit</code>、<code>type</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 补齐向量队列失败。
 
 ```bash
 # Resource-intensive or external side effect; use only in an isolated service environment.
@@ -5792,10 +5406,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 embeddings / sync batch；目标资源与完整业务约束见第 15 章「语义检索与运维任务」。
 - 权限：管理员；仅条件开关开启时注册。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart type=gallery|wiki|post|all(default all); limit integer1–500(default runtime imageEmbeddingBatchSize); sync-batch additionally galleryImageIds/includeFailed/forceRebuild；解析 schema manual image embedding parser；数值/布尔解析 limit: integer; default getImageEmbeddingBatchSize(；includeFailed: boolean; default false；forceRebuild: boolean; default false。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>limit</code>、<code>includeFailed</code>、<code>forceRebuild</code>、<code>type</code>、<code>modelName</code>、<code>vectorSize</code>、<code>qdrantCollection</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 500: 批量生成向量失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：type 可选 string；galleryImageIds 可选 string[]；limit 可选 integer；includeFailed 可选 boolean；forceRebuild 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_embeddings_sync_batch`。
+- 成功响应：HTTP 200：application/json <code>gallery</code>、<code>wiki</code>、<code>post</code>、<code>limit</code>、<code>includeFailed</code>、<code>forceRebuild</code>、<code>type</code>、<code>modelName</code>、<code>vectorSize</code>、<code>qdrantCollection</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 批量生成向量失败。
 
 ```bash
 # Resource-intensive or external side effect; use only in an isolated service environment.
@@ -5808,10 +5421,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：读取 embeddings / errors；目标资源与完整业务约束见第 15 章「语义检索与运维任务」。
 - 权限：管理员；仅条件开关开启时注册。
-- 参数契约：path 无 path 字段；query type=gallery|wiki|post|all(default all); limit integer1–200 default20；body/multipart 此处理器不读取 JSON body；解析 schema embedding error query；数值/布尔解析 limit: integer; default 20; range 1–200,。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>errors</code>、<code>total</code>、<code>type</code>、<code>warnings</code>、<code>imageSourceAvailability</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 500: 获取向量失败记录失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query type 可选 string；limit 可选 integer，默认 20；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_embeddings_errors`。
+- 成功响应：HTTP 200：application/json <code>errors</code>、<code>total</code>、<code>type</code>、<code>warnings</code>、<code>imageSourceAvailability</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取向量失败记录失败。
 
 ```bash
 # Resource-intensive or external side effect; use only in an isolated service environment.
@@ -5824,10 +5436,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/embeddings/errors?type=al
 
 - 用途：创建/提交/触发 embeddings / retry failed；目标资源与完整业务约束见第 15 章「语义检索与运维任务」。
 - 权限：管理员；仅条件开关开启时注册。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart type=gallery|wiki|post|all(default all); limit integer1–500(default runtime imageEmbeddingBatchSize); sync-batch additionally galleryImageIds/includeFailed/forceRebuild；解析 schema manual image embedding parser；数值/布尔解析 limit: integer; default getImageEmbeddingBatchSize(。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>limit</code>、<code>type</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 500: 重试失败向量任务失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：type 可选 string；limit 可选 integer。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_embeddings_retry_failed`。
+- 成功响应：HTTP 200：application/json <code>gallery</code>、<code>wiki</code>、<code>post</code>、<code>limit</code>、<code>type</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 重试失败向量任务失败。
 
 ```bash
 # Resource-intensive or external side effect; use only in an isolated service environment.
@@ -5840,10 +5451,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 embeddings / rebuild all；目标资源与完整业务约束见第 15 章「语义检索与运维任务」。
 - 权限：管理员；仅条件开关开启时注册。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart type=gallery|wiki|post|all(default all); limit integer1–500(default runtime imageEmbeddingBatchSize); sync-batch additionally galleryImageIds/includeFailed/forceRebuild；解析 schema manual image embedding parser；数值/布尔解析 limit: integer; default getImageEmbeddingBatchSize(。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>limit</code>、<code>type</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 500: 重建所有向量失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：type 可选 string；limit 可选 integer。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_embeddings_rebuild_all`。
+- 成功响应：HTTP 200：application/json <code>gallery</code>、<code>wiki</code>、<code>post</code>、<code>limit</code>、<code>type</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 重建所有向量失败。
 
 ```bash
 # Resource-intensive or external side effect; use only in an isolated service environment.
@@ -5856,10 +5466,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 embeddings / sync wiki；目标资源与完整业务约束见第 15 章「语义检索与运维任务」。
 - 权限：管理员；仅条件开关开启时注册。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart slugs nonempty string array; enqueue Wiki image vectors；解析 schema manual image embedding parser。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>nested DTO fields</code>、<code>slugs</code>、<code>modelName</code>、<code>vectorSize</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 请提供至少一个 Wiki 页面 slug；HTTP 500: 同步 Wiki 页面向量失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：slugs 可选 string[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_embeddings_sync_wiki`。
+- 成功响应：HTTP 200：application/json <code>requested</code>、<code>queued</code>、<code>slugs</code>、<code>modelName</code>、<code>vectorSize</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 请提供至少一个 Wiki 页面 slug；HTTP 500: 同步 Wiki 页面向量失败。
 
 ```bash
 # Resource-intensive or external side effect; use only in an isolated service environment.
@@ -5872,10 +5481,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 embeddings / sync post；目标资源与完整业务约束见第 15 章「语义检索与运维任务」。
 - 权限：管理员；仅条件开关开启时注册。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart ids nonempty Post internal ID array; enqueue Post image vectors；解析 schema manual image embedding parser。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>nested DTO fields</code>、<code>ids</code>、<code>modelName</code>、<code>vectorSize</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 请提供至少一个 Post ID；HTTP 500: 同步 Post 向量失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：ids 可选 string[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_embeddings_sync_post`。
+- 成功响应：HTTP 200：application/json <code>requested</code>、<code>queued</code>、<code>ids</code>、<code>modelName</code>、<code>vectorSize</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 请提供至少一个 Post ID；HTTP 500: 同步 Post 向量失败。
 
 ```bash
 # Resource-intensive or external side effect; use only in an isolated service environment.
@@ -5888,10 +5496,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：读取 embeddings / text / status；目标资源与完整业务约束见第 15 章「语义检索与运维任务」。
 - 权限：管理员；仅条件开关开启时注册。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>summary</code>、<code>modelName</code>、<code>vectorSize</code>、<code>textCollection</code>、<code>textModelLoaded</code>、<code>tokenizerLoaded</code>、<code>textEmbeddingReady</code>、<code>textEmbeddingTableMissing</code>、<code>textEmbeddingWarning</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 401, 403, 500。HTTP 500: 获取文本向量状态失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_embeddings_text_status`。
+- 成功响应：HTTP 200：application/json <code>summary</code>、<code>modelName</code>、<code>vectorSize</code>、<code>textCollection</code>、<code>textModelLoaded</code>、<code>tokenizerLoaded</code>、<code>textEmbeddingReady</code>、<code>textEmbeddingTableMissing</code>、<code>textEmbeddingWarning</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 获取文本向量状态失败。
 
 ```bash
 # Resource-intensive or external side effect; use only in an isolated service environment.
@@ -5904,10 +5511,9 @@ curl --fail-with-body -H "$AUTH_HEADER" "$BASE_URL/api/embeddings/text/status"
 
 - 用途：创建/提交/触发 embeddings / text / enqueue；目标资源与完整业务约束见第 15 章「语义检索与运维任务」。
 - 权限：管理员；仅条件开关开启时注册。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart sourceType=wiki|post|music|album|all(default all); limit integer1–2000(default runtime imageEmbeddingBatchSize); slugs:string[] for Wiki or ids:string[] with sourceType post/music/album；解析 schema manual text embedding parser；数值/布尔解析 limit: integer; default getImageEmbeddingBatchSize(。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>nested DTO fields</code>、<code>slugs</code>、<code>sourceType</code>、<code>ids</code>、<code>limit</code>；HTTP 400: <code>error</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 400: 提供 ids 时必须指定 sourceType 为 post/music/album；HTTP 500: 补齐文本向量队列失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：sourceType 可选 string；limit 可选 integer；slugs 可选 string[]；ids 可选 string[]。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_embeddings_text_enqueue`。
+- 成功响应：HTTP 200：application/json <code>queued</code>、<code>slugs</code>、<code>sourceType</code>、<code>ids</code>、<code>limit</code>。
+- HTTP 状态/失败：200, 400, 401, 403, 429, 500。HTTP 400: 提供 ids 时必须指定 sourceType 为 post/music/album；HTTP 500: 补齐文本向量队列失败。
 
 ```bash
 # Resource-intensive or external side effect; use only in an isolated service environment.
@@ -5920,10 +5526,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 embeddings / text / sync；目标资源与完整业务约束见第 15 章「语义检索与运维任务」。
 - 权限：管理员；仅条件开关开启时注册。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart limit integer1–500(default runtime batch); includeFailed boolean(default false)；解析 schema manual text embedding parser；数值/布尔解析 limit: integer; default getImageEmbeddingBatchSize(；includeFailed: boolean; default false。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>nested DTO fields</code>、<code>limit</code>、<code>includeFailed</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 500: 批量生成文本向量失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：limit 可选 integer；includeFailed 可选 boolean。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_embeddings_text_sync`。
+- 成功响应：HTTP 200：application/json <code>processed</code>、<code>succeeded</code>、<code>failed</code>、<code>limit</code>、<code>includeFailed</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 批量生成文本向量失败。
 
 ```bash
 # Resource-intensive or external side effect; use only in an isolated service environment.
@@ -5936,10 +5541,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 embeddings / text / retry failed；目标资源与完整业务约束见第 15 章「语义检索与运维任务」。
 - 权限：管理员；仅条件开关开启时注册。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart sourceType=wiki|post|music|album|all(default all); limit integer1–500(default runtime batch)；解析 schema manual text embedding parser；数值/布尔解析 limit: integer; default getImageEmbeddingBatchSize(。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>nested DTO fields</code>、<code>limit</code>、<code>sourceType</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 500: 重试失败文本向量任务失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：sourceType 可选 string；limit 可选 integer。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_embeddings_text_retry_failed`。
+- 成功响应：HTTP 200：application/json <code>resetCount</code>、<code>processedCount</code>、<code>processed</code>、<code>succeeded</code>、<code>failed</code>、<code>limit</code>、<code>sourceType</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 重试失败文本向量任务失败。
 
 ```bash
 # Resource-intensive or external side effect; use only in an isolated service environment.
@@ -5952,10 +5556,9 @@ curl --fail-with-body -X POST -H "$AUTH_HEADER" -H 'Content-Type: application/js
 
 - 用途：创建/提交/触发 embeddings / text / rebuild all；目标资源与完整业务约束见第 15 章「语义检索与运维任务」。
 - 权限：管理员；仅条件开关开启时注册。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart sourceType=wiki|post|music|album|all(default all); limit integer1–500(default runtime batch)；解析 schema manual text embedding parser；数值/布尔解析 limit: integer; default getImageEmbeddingBatchSize(。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>nested DTO fields</code>、<code>limit</code>、<code>sourceType</code>；HTTP 500: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 400, 401, 403, 500。HTTP 500: 重建所有文本向量失败。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：sourceType 可选 string；limit 可选 integer。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_embeddings_text_rebuild_all`。
+- 成功响应：HTTP 200：application/json <code>resetCount</code>、<code>processed</code>、<code>succeeded</code>、<code>failed</code>、<code>limit</code>、<code>sourceType</code>。
+- HTTP 状态/失败：200, 401, 403, 429, 500。HTTP 500: 重建所有文本向量失败。
 
 ```bash
 # Resource-intensive or external side effect; use only in an isolated service environment.
@@ -5976,10 +5579,9 @@ GET /api/setup/status 返回 initialized/requiresSetup。POST /api/setup/initial
 
 - 用途：读取 setup / status；目标资源与完整业务约束见第 16 章「仅网页登录、初始化及停用入口」。
 - 权限：公开/可选身份。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart 此处理器不读取 body。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>initialized</code>、<code>requiresSetup</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200。无显式错误状态。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；无请求体。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `get_api_setup_status`。
+- 成功响应：HTTP 200：application/json <code>initialized</code>、<code>requiresSetup</code>。
+- HTTP 状态/失败：200, 401, 429。
 
 ```bash
 curl --fail-with-body "$BASE_URL/api/setup/status"
@@ -5991,10 +5593,9 @@ curl --fail-with-body "$BASE_URL/api/setup/status"
 
 - 用途：创建/提交/触发 setup / initialize；目标资源与完整业务约束见第 16 章「仅网页登录、初始化及停用入口」。
 - 权限：公开/可选身份。限流器 authRateLimiter。
-- 参数契约：path 无 path 字段；query 无 query 字段；body/multipart displayName: required string；email: required string；password: required string；validateBody schema setupInitializeSchema。数组嵌套与字段长度按 referenced schema/DTO 表；省略/null/空数组和 PUT/PATCH 语义按领域说明。
-- 成功响应：HTTP 200: <code>error</code>；HTTP 201: <code>success</code>、<code>user</code>；HTTP 409: <code>error</code>。嵌套字段见共享 DTO 表；包装按接口状态分支，不统一假设 data。
-- HTTP 状态/失败：200, 201, 400, 409。HTTP 400/409 分支；触发条件见领域说明。所有权、可见性、软删除和副作用见本章业务说明。
-- curl：传输格式模板；替换 REPLACE\_ 为前序响应真实 ID。破坏性操作只在隔离环境执行。
+- 参数契约：path 无；query 无；application/json：email 必填 string；displayName 必填 string ≤50 字符；password 必填 string ≤128 字符。嵌套字段、标准化规则和媒体类型分支见 [OpenAPI 规范](/openapi.json) 的 `post_api_setup_initialize`。
+- 成功响应：HTTP 201：application/json <code>success</code>、<code>user</code>。
+- HTTP 状态/失败：201, 400, 401, 409, 429, default。HTTP 400/409 分支；触发条件见领域说明。
 
 ```bash
 curl --fail-with-body -X POST -H 'Content-Type: application/json' --data '{"displayName":"文档测试用户","email":"user@example.invalid","password":"REPLACE_WITH_TEST_PASSWORD"}' "$BASE_URL/api/setup/initialize"
@@ -6004,17 +5605,17 @@ curl --fail-with-body -X POST -H 'Content-Type: application/json' --data '{"disp
 
 常见错误形状为 {error}，部分响应增加 code、fields 或 details。validateBody 校验失败返回 HTTP 400 {error:"Validation failed",fields}；字段错误路径由 Zod schema 决定。按状态和存在的 code 分支，不要依赖中文文案。
 
-| HTTP | 说明                                                                                                         |
-| ---- | ------------------------------------------------------------------------------------------------------------ |
-| 400  | 参数/schema/状态无效；根据具体 endpoint 的字段表修正。                                                       |
-| 401  | 未认证或 API 密钥无效、过期、撤销；密钥错误 code 为 API_KEY_INVALID。                                        |
-| 403  | 角色、封禁、资源归属/可见性或凭证类型限制；COOKIE_SESSION_REQUIRED 与 API_KEY_SESSION_FORBIDDEN 是不同边界。 |
-| 404  | 资源不存在或不可见；核对 id/docId/slug/sourceId 类型。                                                       |
-| 409  | 状态/重复关系/并发冲突；先读取当前记录。                                                                     |
-| 410  | 上传会话过期；旧音乐导入接口也返回 410。                                                                     |
-| 413  | 请求体/文件或维护批次过大；遵守单接口限制。                                                                  |
-| 429  | 限流；按 Retry-After（若有）退避。                                                                           |
-| 5xx  | 服务或依赖异常；写请求先确认服务端状态，不能假设未执行。                                                     |
+| HTTP | 说明                                                                  |
+| ---- | --------------------------------------------------------------------- |
+| 400  | 参数/schema/状态无效；根据具体 endpoint 的字段表修正。                |
+| 401  | 未认证或 API 密钥无效、过期、撤销；密钥错误 code 为 API_KEY_INVALID。 |
+| 403  | 角色、封禁、资源归属或可见性不允许。                                  |
+| 404  | 资源不存在或不可见；核对 id/docId/slug/sourceId 类型。                |
+| 409  | 状态/重复关系/并发冲突；先读取当前记录。                              |
+| 410  | 上传会话过期；旧音乐导入接口也返回 410。                              |
+| 413  | 请求体/文件或维护批次过大；遵守单接口限制。                           |
+| 429  | 限流；按 Retry-After（若有）退避。                                    |
+| 5xx  | 服务或依赖异常；写请求先确认服务端状态，不能假设未执行。              |
 
 下载端点返回附件而非 JSON：备份 ZIP 为 application/zip，恢复图片报告为 application/json，ImageMap CSV 为 text/csv。API 没有通用幂等键。重复上传文件可能重复创建 media claim；使用 session/asset 接口返回的 ID 查询状态，不要仅凭客户端断开认定失败。
 
