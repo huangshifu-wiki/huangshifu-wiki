@@ -12,6 +12,12 @@
 服务端语义搜索功能开关位于管理后台「系统参数」，部署后请按需调整；
 若未启动 Qdrant 而功能开关为开启，语义搜索接口会返回错误。
 
+应用镜像按 CPU 推理和 PostgreSQL 构建。依赖安装阶段读取 `.npmrc`，跳过 ONNX CUDA 库下载；
+`scripts/prune-docker-deps.mjs` 在生产依赖复制到最终镜像前，保留目标平台的 ONNX 二进制，
+裁剪 ONNX Web 的浏览器 WASM、源码映射及 Prisma 客户端的非 PostgreSQL 资源。
+Prisma CLI、原生引擎、PostgreSQL 生成资源和备份恢复工具保留在镜像内。
+升级 Transformers、ONNX Runtime 或 Prisma 后，应在成品镜像中验证客户端生成、迁移、备份恢复及图文向量推理。
+
 ## 1. 服务器准备
 
 安装基础工具：
