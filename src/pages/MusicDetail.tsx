@@ -9,14 +9,17 @@ import {
   Music,
   Images,
   Play,
-  ChevronDown,
-  ChevronUp,
 } from '@/src/components/icons'
-import { clsx } from 'clsx'
 import { format } from 'date-fns'
 
 import { apiGet } from '../lib/apiClient'
-import { Button, LinkButton, LoadErrorState, Skeleton } from '@/src/components/ui'
+import {
+  Button,
+  ExpandableContent,
+  LinkButton,
+  LoadErrorState,
+  Skeleton,
+} from '@/src/components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useMusic } from '../context/MusicContext'
 import { useToast } from '../components/Toast'
@@ -179,8 +182,6 @@ const MusicDetail = () => {
   const [loadError, setLoadError] = useState<unknown | null>(null)
   const [postsLoading, setPostsLoading] = useState(true)
   const [postsError, setPostsError] = useState<unknown | null>(null)
-  const [descExpanded, setDescExpanded] = useState(false)
-  const [lyricsExpanded, setLyricsExpanded] = useState(false)
   const [lyricsCopied, setLyricsCopied] = useState(false)
   const [coverLightboxOpen, setCoverLightboxOpen] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -270,6 +271,14 @@ const MusicDetail = () => {
   }, [songId, user?.uid])
 
   const coverGallery = useMemo(() => buildMusicCoverGallery(song), [song])
+  const lyricContentKey = useMemo(
+    () => JSON.stringify([song?.docId, song?.lyric || '']),
+    [song?.docId, song?.lyric]
+  )
+  const descriptionContentKey = useMemo(
+    () => JSON.stringify([song?.docId, song?.description || '']),
+    [song?.docId, song?.description]
+  )
 
   // SEO 元数据：加载中/失败不可索引，成功后输出歌曲详情与 MusicRecording JSON-LD
   const songPath = `/music/${songId}`
@@ -480,71 +489,45 @@ const MusicDetail = () => {
               <div className="mb-4 flex flex-wrap items-center gap-3">
                 <SectionHeading>歌词</SectionHeading>
                 {song?.lyric && (
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      type="button"
-                      data-press-feedback="ripple"
-                      onClick={handleCopyLyrics}
-                    >
-                      {lyricsCopied ? '已复制' : '复制歌词'}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      type="button"
-                      data-press-feedback="ripple"
-                      onClick={() => setLyricsExpanded(!lyricsExpanded)}
-                    >
-                      {lyricsExpanded ? '收起' : '展开'}
-                    </Button>
-                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    type="button"
+                    data-press-feedback="ripple"
+                    onClick={handleCopyLyrics}
+                  >
+                    {lyricsCopied ? '已复制' : '复制歌词'}
+                  </Button>
                 )}
               </div>
-              <div
-                className={clsx(
-                  'text-[1.0625rem] leading-[2] text-text-secondary whitespace-pre-line tracking-[0.03em] py-4 px-1 overflow-hidden transition-all',
-                  !lyricsExpanded && 'max-h-[300px]'
-                )}
+              <ExpandableContent
+                key={lyricContentKey}
+                previewHeight={300}
+                expandLabel="展开完整歌词"
+                collapseLabel="收起歌词"
+                contentClassName="text-[1.0625rem] leading-[2] text-text-secondary whitespace-pre-line tracking-[0.03em] py-4 px-1"
               >
                 <LyricsDisplay
                   lyric={song?.lyric || ''}
                   currentTime={song?.docId === currentSong?.docId ? currentTime : undefined}
                 />
-              </div>
+              </ExpandableContent>
             </div>
 
             {/* Description */}
             {song?.description && (
               <div className="mb-10">
                 <SectionHeading>歌曲描述</SectionHeading>
-                <div
-                  className={clsx(
-                    'prose max-w-none text-text-secondary overflow-hidden transition-all mt-4',
-                    !descExpanded && 'max-h-[16rem]'
-                  )}
+                <ExpandableContent
+                  key={descriptionContentKey}
+                  previewHeight={256}
+                  expandLabel="展开完整描述"
+                  collapseLabel="收起描述"
+                  className="mt-4"
+                  contentClassName="prose max-w-none text-text-secondary"
                 >
-                  <MarkdownRenderer content={song.description || ''} />
-                </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  type="button"
-                  data-press-feedback="ripple"
-                  onClick={() => setDescExpanded(!descExpanded)}
-                  className="mt-3"
-                >
-                  {descExpanded ? (
-                    <>
-                      收起 <ChevronUp size={14} />
-                    </>
-                  ) : (
-                    <>
-                      展开 <ChevronDown size={14} />
-                    </>
-                  )}
-                </Button>
+                  <MarkdownRenderer content={song.description} />
+                </ExpandableContent>
               </div>
             )}
 

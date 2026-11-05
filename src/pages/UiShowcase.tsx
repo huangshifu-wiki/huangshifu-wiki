@@ -13,6 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   EmptyState,
+  ExpandableContent,
   Field,
   FullscreenSurface,
   IconButton,
@@ -83,6 +84,7 @@ const UiShowcase = () => {
   const [demoTags, setDemoTags] = useState(['古风'])
   const [fullscreenDemo, setFullscreenDemo] = useState(false)
   const [demoMarkdown, setDemoMarkdown] = useState(DEMO_MARKDOWN)
+  const [expandedIllustration, setExpandedIllustration] = useState(false)
   const [menuResult, setMenuResult] = useState('尚未选择菜单操作')
   const [demoFilter, setDemoFilter] = useState<TagFilter>({ tags: ['古风'], mode: 'any' })
   const filterDemoProps = {
@@ -428,6 +430,75 @@ const UiShowcase = () => {
             <TabsContent value="one">条目内容</TabsContent>
             <TabsContent value="two">修订内容</TabsContent>
           </Tabs>
+        </ShowcaseSection>
+
+        <ShowcaseSection title="正文展开">
+          <div className="space-y-8">
+            <div>
+              <h3 className="mb-3 text-sm font-semibold text-text-primary">短正文</h3>
+              <ExpandableContent
+                previewHeight={256}
+                expandLabel="展开完整描述"
+                collapseLabel="收起描述"
+                contentClassName="text-text-secondary leading-relaxed"
+              >
+                <p>一段简短的歌曲介绍，完整显示，不需要额外的阅读操作。</p>
+              </ExpandableContent>
+            </div>
+            <div>
+              <h3 className="mb-3 text-sm font-semibold text-text-primary">逐行歌词</h3>
+              <ExpandableContent
+                previewHeight={300}
+                expandLabel="展开完整歌词"
+                collapseLabel="收起歌词"
+                contentClassName="text-text-secondary text-[1.0625rem] leading-[2]"
+              >
+                {Array.from({ length: 16 }, (_, index) => (
+                  <p key={index}>
+                    {index + 1} ·{' '}
+                    {index % 2 === 0
+                      ? '若有人兮山之阿，被薜荔兮带女萝。'
+                      : '既含睇兮又宜笑，子慕予兮善窈窕。'}
+                  </p>
+                ))}
+              </ExpandableContent>
+            </div>
+            <div>
+              <div className="mb-3 flex flex-wrap items-center gap-3">
+                <h3 className="text-sm font-semibold text-text-primary">富文本与动态尺寸</h3>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setExpandedIllustration((value) => !value)}
+                >
+                  {expandedIllustration ? '缩小示意图' : '增高示意图'}
+                </Button>
+              </div>
+              <ExpandableContent
+                id="expandable-description-example"
+                previewHeight={256}
+                expandLabel="展开完整描述"
+                collapseLabel="收起描述"
+                contentClassName="prose max-w-none text-text-secondary"
+              >
+                <p>歌曲介绍可以包含段落、插图和链接，正文始终只渲染一份。</p>
+                <p>调整上方示意图尺寸，核对短内容与长内容之间的入口切换。</p>
+                <div
+                  role="img"
+                  aria-label="可调高度的插图示意"
+                  className="my-4 grid place-items-center bg-surface-alt text-sm text-text-muted"
+                  style={{ height: expandedIllustration ? 360 : 80 }}
+                >
+                  插图示意
+                </div>
+                <p>
+                  阅读完整内容后，可使用底部入口收起，也可键盘聚焦
+                  <a href="#expandable-description-example">正文末尾链接</a>
+                  检查隐藏内容的自动揭示。
+                </p>
+              </ExpandableContent>
+            </div>
+          </div>
         </ShowcaseSection>
 
         <ShowcaseSection title="数据表格">
