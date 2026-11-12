@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useRouteActive } from '../lib/routeActivity'
 
 export const FLOATING_TRANSITION_MS = 220
 
@@ -19,6 +20,7 @@ export const useFloatingPresence = (
   open: boolean,
   durationMs: number = FLOATING_TRANSITION_MS
 ): FloatingPresence => {
+  const active = useRouteActive()
   // exited：卸载完成；entered：入场预热完成（浏览器已绘制过收起态，可以安全触发过渡）
   const [exited, setExited] = useState(!open)
   const [entered, setEntered] = useState(open)
@@ -28,8 +30,8 @@ export const useFloatingPresence = (
   const frameRef = useRef<number | null>(null)
 
   // 渲染期派生：收起与"关闭途中重开"在当次渲染即翻转 data-state，过渡平滑反向
-  const mounted = open || !exited
-  const visible = open && entered
+  const mounted = active && (open || !exited)
+  const visible = active && open && entered
 
   useEffect(() => {
     const clearPending = () => {
@@ -44,6 +46,13 @@ export const useFloatingPresence = (
     }
 
     clearPending()
+    if (!active) {
+      exitedRef.current = !open
+      enteredRef.current = open
+      setExited(!open)
+      setEntered(open)
+      return clearPending
+    }
 
     if (open) {
       if (exitedRef.current) {
@@ -76,7 +85,7 @@ export const useFloatingPresence = (
     }
 
     return clearPending
-  }, [durationMs, open])
+  }, [active, durationMs, open])
 
   return {
     mounted,

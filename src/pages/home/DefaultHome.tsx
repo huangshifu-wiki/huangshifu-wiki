@@ -7,6 +7,7 @@ import { SmartImage } from '../../components/SmartImage'
 import { CoverPlaceholder } from '../../components/CoverPlaceholder'
 import { SiteFooterContent } from '../../components/SiteFooter'
 import { useMusic } from '../../context/MusicContext'
+import { useRouteEntry } from '../../lib/routeActivity'
 import { apiGet } from '../../lib/apiClient'
 import { formatEventListDate, getEventCoverSrc, getEventListDayOffset } from '../../lib/eventFormat'
 import { EventDateOffset } from '../../components/Events/EventDateOffset'
@@ -75,9 +76,13 @@ const initialRetryState: HomeRetryState = {
 const homeSections: HomeSection[] = ['events', 'galleries', 'songs', 'albums']
 
 function useRevealOnScroll(refreshKey: number) {
+  const { active, rootRef } = useRouteEntry()
   useEffect(() => {
+    if (!active) return
+    const root = rootRef.current ?? document
+    let connected = true
     if (typeof IntersectionObserver === 'undefined') {
-      document.querySelectorAll('.home-reveal').forEach((element) => {
+      root.querySelectorAll('.home-reveal:not(.is-visible)').forEach((element) => {
         element.classList.add('is-visible')
       })
       return
@@ -85,6 +90,7 @@ function useRevealOnScroll(refreshKey: number) {
 
     const observer = new IntersectionObserver(
       (entries) => {
+        if (!connected) return
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
             entry.target.classList.add('is-visible')
@@ -95,14 +101,15 @@ function useRevealOnScroll(refreshKey: number) {
       { threshold: 0.08, rootMargin: '0px 0px -40px 0px' }
     )
 
-    document.querySelectorAll('.home-reveal').forEach((element) => {
+    root.querySelectorAll('.home-reveal:not(.is-visible)').forEach((element) => {
       observer.observe(element)
     })
 
     return () => {
+      connected = false
       observer.disconnect()
     }
-  }, [refreshKey])
+  }, [active, rootRef, refreshKey])
 }
 
 function SectionHeader({

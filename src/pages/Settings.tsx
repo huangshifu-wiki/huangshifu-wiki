@@ -33,6 +33,7 @@ import { useDialog } from '../components/Dialog'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { useTurnstileChallenge } from '../hooks/useTurnstileChallenge'
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
+import { useRouteActive } from '../lib/routeActivity'
 import { hasFormChanges } from '../utils/formDirty'
 import { useAuth } from '../context/AuthContext'
 import { useUserPreferences } from '../context/UserPreferencesContext'
@@ -254,6 +255,7 @@ function PrivacySwitch({
 }
 
 const Settings = () => {
+  const active = useRouteActive()
   const { user, profile, refreshAuth, isBanned } = useAuth()
   const { preferences, updatePreferences } = useUserPreferences()
   const { section } = useParams<{ section?: string }>()
@@ -548,6 +550,7 @@ const Settings = () => {
 
   useEffect(() => {
     if (
+      !active ||
       !userPublicId ||
       activeSection !== 'content' ||
       activeContentTab !== 'galleries' ||
@@ -598,6 +601,7 @@ const Settings = () => {
       }
     }
   }, [
+    active,
     activeContentTab,
     activeSection,
     contentScope,

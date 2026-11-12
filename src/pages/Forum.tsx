@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Routes, Route, useParams, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useUserPreferences } from '../context/UserPreferencesContext'
+import { useRouteEntry } from '../lib/routeActivity'
 import {
   MessageSquare,
   Heart,
@@ -354,6 +355,8 @@ const PostList = () => {
 }
 
 const PostDetail = () => {
+  const { active, rootRef } = useRouteEntry()
+  const handledCommentEntries = useRef(new Set<string>())
   const { t } = useI18n()
   const { postId } = useParams()
   const [post, setPost] = useState<PostItem | null>(null)
@@ -440,6 +443,7 @@ const PostDetail = () => {
   }, [postId, isAdmin, showDeletedComments, user?.uid])
 
   useEffect(() => {
+    if (!active || handledCommentEntries.current.has(location.key)) return
     if (!location.hash.startsWith('#comment-')) {
       setHighlightedCommentId(null)
       return
@@ -450,8 +454,13 @@ const PostDetail = () => {
     setHighlightedCommentId(nextHighlightedCommentId)
 
     const frame = window.requestAnimationFrame(() => {
-      const target = document.getElementById(`comment-${nextHighlightedCommentId}`)
-      target?.scrollIntoView({ block: 'start' })
+      const target = rootRef.current?.querySelector<HTMLElement>(
+        `#${CSS.escape(`comment-${nextHighlightedCommentId}`)}`
+      )
+      if (target) {
+        handledCommentEntries.current.add(location.key)
+        target.scrollIntoView({ block: 'start', behavior: 'instant' })
+      }
     })
     const clearTimer = window.setTimeout(() => {
       setHighlightedCommentId((current) => (current === nextHighlightedCommentId ? null : current))
@@ -460,8 +469,9 @@ const PostDetail = () => {
     return () => {
       window.cancelAnimationFrame(frame)
       window.clearTimeout(clearTimer)
+      setHighlightedCommentId(null)
     }
-  }, [comments, location.hash])
+  }, [active, comments, location.hash, location.key, rootRef])
 
   // SEO 元数据：加载中/失败/未公开发布不可索引，公开已发布帖子才 index
   const postPath = `/forum/${postId}`

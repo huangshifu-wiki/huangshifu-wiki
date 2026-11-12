@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate, Outlet } from 'react-router-dom'
 import {
   type LucideIcon,
@@ -230,7 +230,7 @@ const NavGroup = ({
   </div>
 )
 
-export const AdminLayout = () => {
+export const AdminLayout = ({ children }: { children?: ReactNode }) => {
   const { user, isAdmin } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
@@ -432,9 +432,7 @@ export const AdminLayout = () => {
           className="flex-1 overflow-y-auto bg-[var(--color-bg-antique)]"
         >
           <div className="relative min-h-full p-4 md:p-6 lg:p-8 before:pointer-events-none before:fixed before:inset-0 before:bg-[image:var(--book-paper-image)] before:bg-[length:var(--book-paper-size)] before:opacity-70 before:content-['']">
-            <div className="relative z-10">
-              <Outlet />
-            </div>
+            <div className="relative z-10">{children ?? <Outlet />}</div>
           </div>
         </main>
       </div>

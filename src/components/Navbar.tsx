@@ -15,12 +15,14 @@ import { useFloatingPresence } from '../hooks/useFloatingPresence'
 import styles from './Navbar.module.css'
 import { usePublicFeatures } from '../hooks/usePublicFeatures'
 import { Button, IconButton } from '@/src/components/ui'
+import { useRouteActive } from '../lib/routeActivity'
 
 import { routeLoaders } from '../lib/routePrefetch'
 
 const AuthModal = routeLoaders.AuthModal.Component
 
 export const Navbar = () => {
+  const active = useRouteActive()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [authModalMounted, setAuthModalMounted] = useState(false)
@@ -63,6 +65,7 @@ export const Navbar = () => {
   useDismissableLayer(navRef, () => setIsMenuOpen(false), isMenuOpen)
 
   useEffect(() => {
+    if (!active) return
     const updateScrolled = () => {
       setIsScrolled(window.scrollY > 40)
     }
@@ -72,7 +75,7 @@ export const Navbar = () => {
     return () => {
       window.removeEventListener('scroll', updateScrolled)
     }
-  }, [])
+  }, [active])
 
   const openAuthModal = (mode: AuthMode) => {
     setAuthInitialMode(mode === 'register' && !allowRegister ? 'login' : mode)

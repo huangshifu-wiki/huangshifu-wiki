@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext'
 import { DropdownPanel } from '../DropdownPanel'
 import { useDismissableLayer } from '../../hooks/useClickOutside'
 import { apiGet, apiPost } from '../../lib/apiClient'
+import { useRouteActive } from '../../lib/routeActivity'
 import { getNotificationLink, getNotificationText } from '../../lib/notifications'
 import type { NotificationsResponse } from '../../types/api'
 import type { NotificationItem } from '../../types/entities'
@@ -57,6 +58,7 @@ NotificationItem.displayName = 'NotificationItem'
 
 export const NotificationPanel = React.memo(({ onNavigate }: NotificationPanelProps) => {
   const { user } = useAuth()
+  const active = useRouteActive()
   const [notifPanelOpen, setNotifPanelOpen] = useState(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -83,12 +85,14 @@ export const NotificationPanel = React.memo(({ onNavigate }: NotificationPanelPr
   }, [user?.uid])
 
   React.useEffect(() => {
-    if (user) {
-      fetchNotifications()
-      const interval = setInterval(fetchNotifications, 60000)
-      return () => clearInterval(interval)
-    }
-  }, [user, fetchNotifications])
+    void fetchNotifications()
+  }, [fetchNotifications])
+
+  React.useEffect(() => {
+    if (!active || !user) return
+    const interval = setInterval(fetchNotifications, 60000)
+    return () => clearInterval(interval)
+  }, [active, user?.uid, fetchNotifications])
 
   const markNotificationRead = useCallback(async (id: string) => {
     try {

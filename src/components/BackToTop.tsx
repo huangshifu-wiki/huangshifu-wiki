@@ -1,18 +1,21 @@
 import { useState, useEffect } from 'react'
 import { ChevronUp } from '@/src/components/icons'
 import { IconButton } from '@/src/components/ui'
+import { useRouteActive } from '../lib/routeActivity'
 
 export default function BackToTop() {
+  const active = useRouteActive()
   const [isVisible, setIsVisible] = useState(false)
 
   useEffect(() => {
+    if (!active) return
     const toggleVisibility = () => {
       setIsVisible(window.scrollY > 300)
     }
 
     window.addEventListener('scroll', toggleVisibility, { passive: true })
     return () => window.removeEventListener('scroll', toggleVisibility)
-  }, [])
+  }, [active])
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' })

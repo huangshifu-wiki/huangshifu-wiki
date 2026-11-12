@@ -34,6 +34,7 @@ import {
 import { getErrorMessage } from '../../lib/errorHandler'
 import { useToast } from '../../components/Toast'
 import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
+import { useRouteEntry } from '../../lib/routeActivity'
 import { hasFormChanges } from '../../utils/formDirty'
 import type {
   EmailVerificationAdminConfig,
@@ -461,11 +462,8 @@ const NUMBER_FIELDS = CONFIG_GROUPS.flatMap((group) => group.fields).filter(
   (field) => field.type === 'number'
 )
 
-function scrollToSection(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
 function SectionNav() {
+  const { rootRef } = useRouteEntry()
   return (
     <nav
       aria-label="设置分类导航"
@@ -476,7 +474,12 @@ function SectionNav() {
           key={id}
           variant="ghost"
           className="h-auto shrink-0 whitespace-nowrap px-3 py-1.5 text-sm"
-          onClick={() => scrollToSection(id)}
+          onClick={() =>
+            rootRef.current?.querySelector<HTMLElement>(`[id="${id}"]`)?.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start',
+            })
+          }
         >
           {label}
         </Button>

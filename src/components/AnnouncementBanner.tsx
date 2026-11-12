@@ -4,6 +4,7 @@ import { clsx } from 'clsx'
 import { Megaphone, X, ChevronRight } from '@/src/components/icons'
 import { Button, IconButton } from '@/src/components/ui'
 import type { AnnouncementItem } from '../types/entities'
+import { useRouteActive } from '../lib/routeActivity'
 
 type AnnouncementBannerProps = ComponentProps<typeof motion.div> & {
   announcement: AnnouncementItem
@@ -21,12 +22,13 @@ export default function AnnouncementBanner({
   ref,
   ...props
 }: AnnouncementBannerProps) {
+  const active = useRouteActive()
   const announcementRef = useRef<HTMLDivElement | null>(null)
 
   useLayoutEffect(() => {
     const root = document.documentElement
     const element = announcementRef.current
-    if (!element || !visible) {
+    if (!active || !element || !visible) {
       root.style.removeProperty('--announcement-bar-offset')
       return
     }
@@ -49,7 +51,7 @@ export default function AnnouncementBanner({
       window.removeEventListener('resize', updateOffset)
       root.style.removeProperty('--announcement-bar-offset')
     }
-  }, [announcement.id, visible])
+  }, [active, announcement.id, visible])
 
   return (
     <AnimatePresence>

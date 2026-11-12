@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { UsePaginationReturn } from './usePagination'
+import { useRouteActive } from '../lib/routeActivity'
 
 interface UseRoutedPaginationOptions {
   totalCount?: number
@@ -74,6 +75,7 @@ function normalizeSearchParams(
 }
 
 export function useRoutedPagination(options: UseRoutedPaginationOptions = {}): UsePaginationReturn {
+  const active = useRouteActive()
   const {
     totalCount,
     serverTotalPages,
@@ -139,7 +141,7 @@ export function useRoutedPagination(options: UseRoutedPaginationOptions = {}): U
   )
 
   useEffect(() => {
-    if (!enabled) return
+    if (!active || !enabled) return
     const normalized = normalizeSearchParams(searchParams, {
       pageParam,
       pageSizeParam,
@@ -161,6 +163,7 @@ export function useRoutedPagination(options: UseRoutedPaginationOptions = {}): U
       { replace: true }
     )
   }, [
+    active,
     defaultPageSize,
     enabled,
     pageParam,
@@ -171,16 +174,16 @@ export function useRoutedPagination(options: UseRoutedPaginationOptions = {}): U
   ])
 
   useEffect(() => {
-    if (!enabled || !hasKnownTotal) return
+    if (!active || !enabled || !hasKnownTotal) return
     if (page > totalPages) {
       updatePaginationParams(totalPages, pageSize, true)
     }
-  }, [enabled, hasKnownTotal, page, pageSize, totalPages, updatePaginationParams])
+  }, [active, enabled, hasKnownTotal, page, pageSize, totalPages, updatePaginationParams])
 
   const handlePageChange = useCallback(
     (newPage: number) => {
       updatePaginationParams(newPage)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      window.scrollTo({ top: 0, behavior: 'instant' })
     },
     [updatePaginationParams]
   )

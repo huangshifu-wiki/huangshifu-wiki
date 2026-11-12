@@ -13,6 +13,7 @@ import { Spinner } from '@/src/components/ui'
 import { useFloatingPresence } from '../hooks/useFloatingPresence'
 import { getFitScale as getFitScaleUtil, computeNextScale } from '../utils/lightbox'
 import { isBackdropClick } from '../utils/modal'
+import { useRouteActive } from '../lib/routeActivity'
 
 interface LightboxImage {
   id: string
@@ -33,6 +34,9 @@ const MAX_PIXEL_SCALE = 5
 const ZOOM_RATIO = 0.1
 
 export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps) => {
+  const active = useRouteActive()
+  const activeRef = useRef(active)
+  activeRef.current = active
   const presence = useFloatingPresence(open)
   const [activeIndex, setActiveIndex] = useState(initialIndex)
   const [pixelScale, setPixelScale] = useState(1)
@@ -96,10 +100,9 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
   }, [imageNaturalWidth, imageNaturalHeight])
 
   const close = useCallback(() => {
-    if (lightboxStateKey.current) {
-      lightboxStateKey.current = null
-      window.history.back()
-    }
+    const key = lightboxStateKey.current
+    lightboxStateKey.current = null
+    if (key && window.history.state?.[key]) window.history.back()
     onCloseRef.current()
   }, [])
 
@@ -123,15 +126,17 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
   closeRef.current = close
 
   useEffect(() => {
-    if (!open || !presence.mounted) return
+    if (!active || !open || !presence.mounted) return
     triggerElementRef.current = document.activeElement as HTMLElement
     closeButtonRef.current?.focus()
     previousBodyOverflowRef.current = document.body.style.overflow
     document.body.style.overflow = 'hidden'
 
-    const key = `lightbox-${Date.now()}`
-    lightboxStateKey.current = key
-    window.history.pushState({ [key]: true, lightboxOpen: true }, '', '')
+    if (!lightboxStateKey.current) {
+      const key = `lightbox-${Date.now()}`
+      lightboxStateKey.current = key
+      window.history.pushState({ ...window.history.state, [key]: true, lightboxOpen: true }, '', '')
+    }
 
     const handlePopstate = (e: PopStateEvent) => {
       if (lightboxStateKey.current && !e.state?.[lightboxStateKey.current]) {
@@ -183,9 +188,10 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
       document.removeEventListener('keydown', handleKeyDown)
       document.body.style.overflow = previousBodyOverflowRef.current ?? ''
       previousBodyOverflowRef.current = null
-      triggerElementRef.current?.focus()
+      if (activeRef.current && triggerElementRef.current?.isConnected)
+        triggerElementRef.current.focus({ preventScroll: true })
     }
-  }, [open, presence.mounted])
+  }, [active, open, presence.mounted])
 
   // Keep refs in sync with state (for non-drag updates)
   useEffect(() => {

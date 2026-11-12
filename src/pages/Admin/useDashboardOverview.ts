@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiGet } from '@/src/lib/apiClient'
 import type { AdminDashboardOverview, AdminDashboardResponse } from '@/src/types/api'
+import { useRouteActive } from '../../lib/routeActivity'
 
 const NO_CACHE_OPTIONS = { staleTime: 0, swr: false }
 const POLL_INTERVAL_MS = 60_000
 
 export function useDashboardOverview() {
+  const active = useRouteActive()
   const [data, setData] = useState<AdminDashboardOverview | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -43,11 +45,15 @@ export function useDashboardOverview() {
 
   useEffect(() => {
     void fetchOverview(false)
+  }, [fetchOverview])
+
+  useEffect(() => {
+    if (!active) return
     const timer = window.setInterval(() => {
       void fetchOverview(false)
     }, POLL_INTERVAL_MS)
     return () => window.clearInterval(timer)
-  }, [fetchOverview])
+  }, [active, fetchOverview])
 
   return { data, loading, refreshing, loadError, lastUpdated, refresh }
 }

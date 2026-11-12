@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { useRouteActive } from '../../lib/routeActivity'
 import {
   HardDrive,
   RefreshCw,
@@ -50,6 +51,7 @@ function getDiskRequestError<T>(
 }
 
 export const AdminDiskMonitor: React.FC = () => {
+  const active = useRouteActive()
   const [diskStatus, setDiskStatus] = useState<DiskStatus | null>(null)
   const [config, setConfig] = useState<DiskMonitorConfig | null>(null)
   const [loading, setLoading] = useState(true)
@@ -128,9 +130,13 @@ export const AdminDiskMonitor: React.FC = () => {
 
   useEffect(() => {
     fetchDiskStatus()
+  }, [fetchDiskStatus])
+
+  useEffect(() => {
+    if (!active) return
     const interval = setInterval(() => fetchDiskStatus({ showLoading: false }), 30000)
     return () => clearInterval(interval)
-  }, [fetchDiskStatus])
+  }, [active, fetchDiskStatus])
 
   const handleStartEdit = () => {
     if (config) {

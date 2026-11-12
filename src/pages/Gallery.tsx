@@ -12,6 +12,7 @@ import { getListLoadState } from '../lib/listLoadState'
 import { useAuth } from '../context/AuthContext'
 import { useUserPreferences } from '../context/UserPreferencesContext'
 import { useIncrementalListLoader } from '../hooks/useIncrementalListLoader'
+import { useRouteActive } from '../lib/routeActivity'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
 import { apiGet, invalidateApiCacheByPrefix } from '../lib/apiClient'
 import { getErrorMessage } from '../lib/errorHandler'
@@ -29,6 +30,7 @@ const DEFAULT_PAGE_SIZE = 24
 const PAGE_SIZE_OPTIONS = [12, 24, 48, 96]
 
 const GalleryList = () => {
+  const active = useRouteActive()
   const location = useLocation()
   const [, setSearchParams] = useSearchParams()
   const [galleries, setGalleries] = useState<GalleryItem[]>([])
@@ -92,7 +94,7 @@ const GalleryList = () => {
   )
 
   useEffect(() => {
-    if (!isIncrementalMode) return
+    if (!active || !isIncrementalMode) return
     setSearchParams(
       (prev) => {
         if (!prev.has('page') && !prev.has('pageSize')) return prev
@@ -103,7 +105,7 @@ const GalleryList = () => {
       },
       { replace: true }
     )
-  }, [isIncrementalMode, setSearchParams])
+  }, [active, isIncrementalMode, setSearchParams])
 
   const fetchGalleries = useCallback(
     async (options?: { bypassCache?: boolean; signal?: AbortSignal }) => {
@@ -162,7 +164,7 @@ const GalleryList = () => {
   }, [fetchGalleries])
 
   useEffect(() => {
-    if (!hasPendingThumbnails) return
+    if (!active || !hasPendingThumbnails) return
 
     const abortController = new AbortController()
     let attempts = 0
@@ -187,7 +189,7 @@ const GalleryList = () => {
         window.clearTimeout(timeoutId)
       }
     }
-  }, [fetchGalleries, hasPendingThumbnails])
+  }, [active, fetchGalleries, hasPendingThumbnails])
 
   useEffect(() => {
     const fetchGalleryAccess = async () => {

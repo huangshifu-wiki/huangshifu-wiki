@@ -7,6 +7,7 @@ import { bookCompactInputClass, bookPanelClass } from '../../components/BookEdit
 import { apiGet } from '../../lib/apiClient'
 import { useToast } from '../../components/Toast'
 import { useFloatingPresence } from '../../hooks/useFloatingPresence'
+import { useRouteActive } from '../../lib/routeActivity'
 import { isBackdropClick } from '../../utils/modal'
 import type { WikiRelationType, WikiRelationRecord } from './types'
 import { RELATION_TYPE_LABELS } from './types'
@@ -169,6 +170,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
   onRelationsChange,
   currentPage = null,
 }) => {
+  const active = useRouteActive()
   const { show } = useToast()
 
   // 筛选和排序状态
@@ -301,6 +303,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
   )
 
   useEffect(() => {
+    if (!active) return
     const handleClickOutside = (e: MouseEvent) => {
       if (relationSearchRef.current && !relationSearchRef.current.contains(e.target as Node)) {
         setShowRelationDropdown(false)
@@ -308,7 +311,7 @@ const WikiRelations: React.FC<WikiRelationsProps> = ({
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [active])
 
   const handleAddRelation = () => {
     if (!newRelation.targetSlug.trim()) {

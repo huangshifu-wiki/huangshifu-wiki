@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import type { RefObject } from 'react'
+import { useRouteActive } from '../lib/routeActivity'
 
 type ClickOutsideHandler = (event: PointerEvent) => void
 
@@ -8,8 +9,9 @@ export const useClickOutside = (
   onClickOutside: ClickOutsideHandler,
   enabled: boolean
 ) => {
+  const active = useRouteActive()
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !active) {
       return
     }
 
@@ -24,7 +26,7 @@ export const useClickOutside = (
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown)
     }
-  }, [enabled, onClickOutside, ref])
+  }, [active, enabled, onClickOutside, ref])
 }
 
 type DismissHandler = () => void
@@ -34,10 +36,11 @@ export const useDismissableLayer = (
   onDismiss: DismissHandler,
   enabled: boolean
 ) => {
+  const active = useRouteActive()
   useClickOutside(ref, onDismiss, enabled)
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !active) {
       return
     }
 
@@ -52,5 +55,5 @@ export const useDismissableLayer = (
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [enabled, onDismiss])
+  }, [active, enabled, onDismiss])
 }

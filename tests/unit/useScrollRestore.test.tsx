@@ -11,7 +11,7 @@ const Harness = () => {
   const [tick, setTick] = useState(0)
 
   return (
-    <div>
+    <div data-route-shell="admin" data-route-active="true">
       <div data-admin-scroll-container ref={containerRef} />
       <button
         type="button"

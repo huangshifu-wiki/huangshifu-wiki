@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { toAbsoluteInternalUrl } from './copyLink'
 import { isPrivateSeoPath } from './seoPrivatePaths'
+import { useRouteActive } from './routeActivity'
 
 export const SEO_SITE_NAME = '黄诗扶 Wiki'
 
@@ -148,11 +149,13 @@ export const applySeoMetadata = (metadata: SeoMetadata): void => {
 }
 
 export const useSeo = (metadata: SeoMetadata): void => {
+  const active = useRouteActive()
   // 依赖使用原始字段与序列化后的 JSON-LD，避免页面普通状态更新时重复改写 head
   const serializedJsonLd = metadata.jsonLd ? JSON.stringify(metadata.jsonLd) : ''
   useEffect(() => {
-    applySeoMetadata(metadata)
+    if (active) applySeoMetadata(metadata)
   }, [
+    active,
     metadata.title,
     metadata.description,
     metadata.canonicalPath,

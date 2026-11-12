@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouteActive } from '../../lib/routeActivity'
 import { Link, useNavigate } from 'react-router-dom'
 import { Search as SearchIcon, Camera, Clock, Sparkles, Trash2, X } from '@/src/components/icons'
 import { clsx } from 'clsx'
@@ -46,6 +47,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
   onRemoveSearchHistoryItem,
   onClearSearchHistory,
 }) => {
+  const active = useRouteActive()
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -81,7 +83,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
   const visibleDropdown = currentDropdown || lastDropdownRef.current
 
   useEffect(() => {
-    if (!dropdownOpen) return
+    if (!active || !dropdownOpen) return
     const handleClickOutside = (e: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
         setInputFocused(false)
@@ -90,7 +92,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [dropdownOpen, onDismissSuggestions])
+  }, [active, dropdownOpen, onDismissSuggestions])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
