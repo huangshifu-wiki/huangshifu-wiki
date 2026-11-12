@@ -104,7 +104,7 @@
   },
   "devDependencies": {
     "@amap/amap-jsapi-types": "^0.0.15",
-    "@babel/parser": "^7.29.13",
+    "@babel/parser": "^8.1.0",
     "@redocly/cli": "^2.75.0",
     "@tailwindcss/vite": "^4.3.4",
     "@tanstack/react-virtual": "^3.14.25",
@@ -137,7 +137,7 @@
     "echarts": "^6.1.0",
     "eslint-config-prettier": "^10.1.8",
     "jsdom": "^29.1.1",
-    "lucide-react": "^0.546.0",
+    "lucide-react": "^1.66.0",
     "motion": "^12.42.0",
     "playwright": "^1.64.1",
     "prettier": "^3.9.10",
