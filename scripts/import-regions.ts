@@ -7,9 +7,9 @@ import http from 'http'
 dotenv.config({ path: '.env.local' })
 dotenv.config()
 
-import { PrismaClient } from '@prisma/client'
+import { createPrismaClient } from '../src/server/prismaClient'
 
-const prisma = new PrismaClient()
+const prisma = createPrismaClient()
 
 const REGIONS_JSON_URL =
   'https://raw.githubusercontent.com/slightlee/regions-data/main/data/processed/regions_20260304_173812.json'

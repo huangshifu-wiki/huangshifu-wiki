@@ -4,6 +4,7 @@ import type { PrismaClient, UserRole } from '@prisma/client'
 import dotenv from 'dotenv'
 import path from 'path'
 import { pathToFileURL } from 'url'
+import { createPrismaClient } from '../src/server/prismaClient'
 
 dotenv.config({ path: '.env.local' })
 dotenv.config()
@@ -208,8 +209,7 @@ export async function runManageSuperAdmin(prisma: ManageSuperAdminPrisma, option
 
 async function main() {
   const options = parseArgs(process.argv.slice(2))
-  const { PrismaClient } = await import('@prisma/client')
-  const prisma = new PrismaClient()
+  const prisma = createPrismaClient()
 
   try {
     await runManageSuperAdmin(prisma, options)

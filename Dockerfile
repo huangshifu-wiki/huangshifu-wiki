@@ -26,6 +26,7 @@ FROM base AS prod-deps
 ARG NPM_REGISTRY=https://registry.npmjs.org
 COPY package.json package-lock.json .npmrc ./
 COPY prisma ./prisma
+COPY prisma.config.ts ./
 RUN npm ci --omit=dev --registry="${NPM_REGISTRY}"
 RUN npm run db:generate
 COPY scripts/prune-docker-deps.mjs ./scripts/prune-docker-deps.mjs
@@ -47,7 +48,7 @@ RUN groupadd --system --gid 1001 nodejs \
 
 COPY --from=prod-deps --chown=appuser:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=appuser:nodejs /app/dist ./dist
-COPY --chown=appuser:nodejs package.json package-lock.json tsconfig.json server.ts ./
+COPY --chown=appuser:nodejs package.json package-lock.json prisma.config.ts tsconfig.json server.ts ./
 COPY --chown=appuser:nodejs prisma ./prisma
 COPY --chown=appuser:nodejs scripts ./scripts
 COPY --chown=appuser:nodejs config ./config

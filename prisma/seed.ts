@@ -1,7 +1,8 @@
-import { PrismaClient } from '@prisma/client'
+import '../src/server/env'
+import { createPrismaClient } from '../src/server/prismaClient'
 import { DEFAULT_WIKI_CATEGORIES } from './wikiCategoryDefaults'
 
-const prisma = new PrismaClient()
+const prisma = createPrismaClient()
 
 async function main() {
   const [sectionCount, userCount, wikiPageCount] = await Promise.all([

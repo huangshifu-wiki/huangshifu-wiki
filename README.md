@@ -66,6 +66,8 @@ npm run dev
 
 首次打开空数据库站点时，会进入 `/setup` 页面创建超级管理员账号。
 
+Prisma CLI、Client 与 PostgreSQL 适配器统一为 7.10.1。连接串和种子命令由 `prisma.config.ts` 管理：保留外部环境变量，开发环境优先读取 `.env.local` 再读取 `.env`，生产环境只读取 `.env`。`db:generate` 无需数据库；`db:migrate` / `db:push` 不再自动生成客户端或运行种子，修改结构后请显式执行 `npm run db:generate`。
+
 ## 常用脚本
 
 | 命令                       | 用途                                                         |
