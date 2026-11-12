@@ -12,7 +12,7 @@ import { resetBackLinkOriginForTests } from '../../src/components/SmartBackLink'
 import { apiGet, apiRequest } from '../../src/lib/apiClient'
 
 // Mock factories load lazy route modules dynamically to preserve App's real React.lazy route boundary.
-const appState = vi.hoisted(() => ({ detailMounts: 0, isAdmin: false }))
+const appState = vi.hoisted(() => ({ isAdmin: false }))
 
 globalThis.ResizeObserver = class implements ResizeObserver {
   observe() {}
@@ -117,9 +117,6 @@ vi.mock('../../src/pages/GalleryDetail', async () => {
   return {
     default: function GalleryDetailMock() {
       const location = useLocation()
-      React.useEffect(() => {
-        appState.detailMounts += 1
-      }, [])
       return React.createElement(
         'div',
         null,
@@ -163,10 +160,9 @@ vi.mock('../../src/pages/GalleryEdit', async () => {
     },
   }
 })
-vi.mock('../../src/components/admin/AdminLayout', async () => {
-  const { Outlet } = await import('react-router-dom')
-  return { AdminLayout: Outlet }
-})
+vi.mock('../../src/components/admin/AdminLayout', () => ({
+  AdminLayout: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}))
 vi.mock('../../src/pages/Admin/AdminDashboard', () => ({
   default: () => <h1>管理面板首页</h1>,
 }))
@@ -232,7 +228,6 @@ beforeAll(async () => {
 
 beforeEach(() => {
   resetBackLinkOriginForTests()
-  appState.detailMounts = 0
   appState.isAdmin = false
   vi.mocked(apiGet).mockImplementation(async (path: string) => {
     if (path.startsWith('/api/admin/')) {
@@ -298,15 +293,13 @@ describe('真实应用的内容编辑路由弹窗', () => {
     renderApp()
 
     await screen.findByRole('heading', { name: '图集详情' })
-    expect(appState.detailMounts).toBe(1)
     await user.click(screen.getByRole('link', { name: '编辑图集' }))
     expect(await screen.findByRole('dialog', { name: '图集编辑弹窗' })).toBeInTheDocument()
-    expect(appState.detailMounts).toBe(1)
 
     await user.click(screen.getByRole('button', { name: '模拟保存' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(window.location.pathname).toBe('/gallery/test-1')
-    await waitFor(() => expect(appState.detailMounts).toBe(2))
+    expect(await screen.findByRole('heading', { name: '图集详情' })).toBeInTheDocument()
   })
 
   it.each([

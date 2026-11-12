@@ -2,6 +2,7 @@ import React from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from '@/src/components/icons'
 import { Button, IconButton, Select, cn } from '@/src/components/ui'
+import { useRouteActive } from '../lib/routeActivity'
 
 interface PaginationProps {
   page: number
@@ -151,6 +152,8 @@ function useDockedPagination(
   dockGroup?: string,
   dockSectionRef?: React.RefObject<HTMLElement | null>
 ) {
+  const active = useRouteActive()
+  enabled = enabled && active
   const anchorRef = React.useRef<HTMLDivElement>(null)
   const navigationRef = React.useRef<HTMLElement>(null)
   const portalHostRef = React.useRef<HTMLElement | null>(null)
@@ -301,7 +304,7 @@ function useDockedPagination(
     }
   }, [dockGroup, dockSectionRef, enabled])
 
-  return { anchorRef, navigationRef, portalHostRef, dockedLayout }
+  return { anchorRef, navigationRef, portalHostRef, dockedLayout: active ? dockedLayout : null }
 }
 
 export const Pagination: React.FC<PaginationProps> = ({

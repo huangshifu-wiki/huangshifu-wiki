@@ -47,6 +47,7 @@ import {
   THUMBNAIL_POLL_MAX_ATTEMPTS,
 } from '../lib/galleryThumbnails'
 import { markCommentDeleted, restoreComment, updateCommentLike } from '../utils/commentState'
+import { useRouteEntry } from '../lib/routeActivity'
 import type { GalleryDetailResponse } from '../types/api'
 import type { GalleryImageItem, GalleryItem } from '../types/entities'
 import { CONTENT_LIMITS } from '../lib/contentLimits'
@@ -100,6 +101,8 @@ const SectionHeading = ({ children }: { children: React.ReactNode }) => (
 )
 
 const GalleryDetail = () => {
+  const { active, rootRef } = useRouteEntry()
+  const handledCommentEntries = useRef(new Set<string>())
   const { galleryId } = useParams()
   const location = useLocation()
   const { user, profile, isBanned } = useAuth()
@@ -156,7 +159,7 @@ const GalleryDetail = () => {
   }, [galleryId])
 
   useEffect(() => {
-    if (!galleryPublicId || !hasPendingThumbnails) return
+    if (!active || !galleryPublicId || !hasPendingThumbnails) return
 
     const abortController = new AbortController()
     let attempts = 0
@@ -195,7 +198,7 @@ const GalleryDetail = () => {
         window.clearTimeout(timeoutId)
       }
     }
-  }, [galleryPublicId, hasPendingThumbnails])
+  }, [active, galleryPublicId, hasPendingThumbnails])
 
   useEffect(() => {
     const fetchGalleryAccess = async () => {
@@ -241,6 +244,7 @@ const GalleryDetail = () => {
   }, [isGalleryPublished, gallery?.id, isAdmin, showDeletedComments])
 
   useEffect(() => {
+    if (!active || handledCommentEntries.current.has(location.key)) return
     if (!location.hash.startsWith('#comment-')) {
       setHighlightedCommentId(null)
       return
@@ -251,8 +255,13 @@ const GalleryDetail = () => {
     setHighlightedCommentId(nextHighlightedCommentId)
 
     const frame = window.requestAnimationFrame(() => {
-      const target = document.getElementById(`comment-${nextHighlightedCommentId}`)
-      target?.scrollIntoView({ block: 'start' })
+      const target = rootRef.current?.querySelector<HTMLElement>(
+        `#${CSS.escape(`comment-${nextHighlightedCommentId}`)}`
+      )
+      if (target) {
+        handledCommentEntries.current.add(location.key)
+        target.scrollIntoView({ block: 'start', behavior: 'instant' })
+      }
     })
     const clearTimer = window.setTimeout(() => {
       setHighlightedCommentId((current) => (current === nextHighlightedCommentId ? null : current))
@@ -261,8 +270,9 @@ const GalleryDetail = () => {
     return () => {
       window.cancelAnimationFrame(frame)
       window.clearTimeout(clearTimer)
+      setHighlightedCommentId(null)
     }
-  }, [comments, location.hash])
+  }, [active, comments, location.hash, location.key, rootRef])
 
   const images = useMemo<DisplayGalleryImage[]>(
     () => (gallery?.images || []).map(toDisplayImage),

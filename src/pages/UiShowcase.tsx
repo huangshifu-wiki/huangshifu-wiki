@@ -56,6 +56,7 @@ import MarkdownEditor from '@/src/components/MarkdownEditor'
 import { TagFilterPanel } from '@/src/components/TagFilterPanel'
 import { MobileTagFilters } from '@/src/components/MobileTagFilters'
 import type { TagFilter } from '@/src/lib/tagFilters'
+import { RouteActivity } from '@/src/lib/routeActivity'
 
 const variants = ['primary', 'secondary', 'ghost', 'danger', 'warning', 'success', 'info'] as const
 
@@ -87,6 +88,9 @@ const UiShowcase = () => {
   const [expandedIllustration, setExpandedIllustration] = useState(false)
   const [menuResult, setMenuResult] = useState('尚未选择菜单操作')
   const [demoFilter, setDemoFilter] = useState<TagFilter>({ tags: ['古风'], mode: 'any' })
+  const [retainedDemoActive, setRetainedDemoActive] = useState(true)
+  const [retainedDemoOpen, setRetainedDemoOpen] = useState(false)
+  const [retainedDraft, setRetainedDraft] = useState('保留这段草稿')
   const filterDemoProps = {
     tags: ['古风', '现场', '原创', '现场录音与特别纪念演出'],
     value: demoFilter,
@@ -314,6 +318,41 @@ const UiShowcase = () => {
         </ShowcaseSection>
 
         <ShowcaseSection title="浮层与导航">
+          <div className="space-y-3">
+            <Button
+              variant="secondary"
+              onClick={() => setRetainedDemoActive(true)}
+              disabled={retainedDemoActive}
+            >
+              恢复示例页
+            </Button>
+            <p className="text-sm text-text-muted">
+              隐藏示例页会暂停浮层与滚动锁；恢复后保留打开状态和草稿。
+            </p>
+            <RouteActivity active={retainedDemoActive}>
+              <div hidden={!retainedDemoActive} inert={!retainedDemoActive}>
+                <Dialog open={retainedDemoOpen} onOpenChange={setRetainedDemoOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="secondary">页面保留示例</Button>
+                  </DialogTrigger>
+                  <DialogContent
+                    title="保留中的编辑"
+                    description="隐藏后可操作外部控件，再恢复页面。"
+                  >
+                    <div className="space-y-4 p-5">
+                      <Field label="保留草稿">
+                        <Input
+                          value={retainedDraft}
+                          onChange={(event) => setRetainedDraft(event.target.value)}
+                        />
+                      </Field>
+                      <Button onClick={() => setRetainedDemoActive(false)}>隐藏示例页</Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </RouteActivity>
+          </div>
           <div className="flex flex-wrap gap-3">
             <Dialog>
               <DialogTrigger asChild>

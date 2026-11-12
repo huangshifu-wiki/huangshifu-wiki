@@ -8,6 +8,20 @@ import { X } from '@/src/components/icons'
 import React from 'react'
 import { IconButton } from './actions'
 import { cn } from './utils'
+import { useRouteActive } from '../../lib/routeActivity'
+
+function useOverlayActivity(onCloseAutoFocus?: (event: Event) => void) {
+  const active = useRouteActive()
+  const activeRef = React.useRef(active)
+  activeRef.current = active
+  return {
+    active,
+    onCloseAutoFocus: (event: Event) => {
+      if (!activeRef.current) event.preventDefault()
+      else onCloseAutoFocus?.(event)
+    },
+  }
+}
 
 const overlayClasses = 'fixed inset-0 z-[1080] bg-[var(--ui-overlay-bg)]'
 // 居中不使用 translate：transform 会让弹窗内的 position: fixed 后代以弹窗为包含块，编辑器全屏会被裁在卡片里
@@ -43,37 +57,42 @@ export const DialogContent = React.forwardRef<
       ...props
     },
     ref
-  ) => (
-    <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className={overlayClasses} />
-      <DialogPrimitive.Content
-        ref={ref}
-        className={cn(contentClasses, maxWidthClassName, className)}
-        {...props}
-      >
-        <header className="flex items-start justify-between gap-4 border-b border-[var(--book-ink-line)] px-5 py-4">
-          <div className="min-w-0">
-            <DialogPrimitive.Title className="font-[var(--book-title-font)] text-xl tracking-[0.08em] text-text-primary">
-              {title}
-            </DialogPrimitive.Title>
-            {description && (
-              <DialogPrimitive.Description className="mt-1 text-sm leading-relaxed text-text-muted">
-                {description}
-              </DialogPrimitive.Description>
+  ) => {
+    const activity = useOverlayActivity(props.onCloseAutoFocus)
+    if (!activity.active) return null
+    return (
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className={overlayClasses} />
+        <DialogPrimitive.Content
+          ref={ref}
+          className={cn(contentClasses, maxWidthClassName, className)}
+          {...props}
+          onCloseAutoFocus={activity.onCloseAutoFocus}
+        >
+          <header className="flex items-start justify-between gap-4 border-b border-[var(--book-ink-line)] px-5 py-4">
+            <div className="min-w-0">
+              <DialogPrimitive.Title className="font-[var(--book-title-font)] text-xl tracking-[0.08em] text-text-primary">
+                {title}
+              </DialogPrimitive.Title>
+              {description && (
+                <DialogPrimitive.Description className="mt-1 text-sm leading-relaxed text-text-muted">
+                  {description}
+                </DialogPrimitive.Description>
+              )}
+            </div>
+            {!hideClose && (
+              <DialogPrimitive.Close asChild>
+                <IconButton variant="ghost" size="sm" aria-label="关闭">
+                  <X className="h-4 w-4" />
+                </IconButton>
+              </DialogPrimitive.Close>
             )}
-          </div>
-          {!hideClose && (
-            <DialogPrimitive.Close asChild>
-              <IconButton variant="ghost" size="sm" aria-label="关闭">
-                <X className="h-4 w-4" />
-              </IconButton>
-            </DialogPrimitive.Close>
-          )}
-        </header>
-        {children}
-      </DialogPrimitive.Content>
-    </DialogPrimitive.Portal>
-  )
+          </header>
+          {children}
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    )
+  }
 )
 DialogContent.displayName = 'DialogContent'
 
@@ -94,22 +113,27 @@ export interface FullscreenSurfaceProps extends Omit<
 export const FullscreenSurface = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   FullscreenSurfaceProps
->(({ open, onOpenChange, label, className, children, ...props }, ref) => (
-  <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
-    <DialogPrimitive.Portal>
-      {/* Overlay 提供浮层打开期间的 body 滚动锁，不能省略 */}
-      <DialogPrimitive.Overlay className="fixed inset-0 z-[1082] bg-transparent" />
-      <DialogPrimitive.Content
-        ref={ref}
-        className={cn('fixed inset-0 z-[1083] bg-[var(--ui-floating-bg)]', className)}
-        {...props}
-      >
-        <DialogPrimitive.Title className="sr-only">{label}</DialogPrimitive.Title>
-        {children}
-      </DialogPrimitive.Content>
-    </DialogPrimitive.Portal>
-  </DialogPrimitive.Root>
-))
+>(({ open, onOpenChange, label, className, children, ...props }, ref) => {
+  const activity = useOverlayActivity(props.onCloseAutoFocus)
+  if (!activity.active) return null
+  return (
+    <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+      <DialogPrimitive.Portal>
+        {/* Overlay 提供浮层打开期间的 body 滚动锁，不能省略 */}
+        <DialogPrimitive.Overlay className="fixed inset-0 z-[1082] bg-transparent" />
+        <DialogPrimitive.Content
+          ref={ref}
+          className={cn('fixed inset-0 z-[1083] bg-[var(--ui-floating-bg)]', className)}
+          {...props}
+          onCloseAutoFocus={activity.onCloseAutoFocus}
+        >
+          <DialogPrimitive.Title className="sr-only">{label}</DialogPrimitive.Title>
+          {children}
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  )
+})
 FullscreenSurface.displayName = 'FullscreenSurface'
 
 export const AlertDialog = AlertDialogPrimitive.Root
@@ -129,35 +153,40 @@ export interface AlertDialogContentProps extends Omit<
 export const AlertDialogContent = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Content>,
   AlertDialogContentProps
->(({ title, description, variant = 'info', className, children, ...props }, ref) => (
-  <AlertDialogPrimitive.Portal>
-    <AlertDialogPrimitive.Overlay className="fixed inset-0 z-[1095] bg-[var(--ui-overlay-bg)]" />
-    <AlertDialogPrimitive.Content
-      ref={ref}
-      className={cn(contentClasses, 'z-[1096] max-w-md overflow-hidden', className)}
-      data-variant={variant}
-      {...props}
-    >
-      <div
-        className={cn(
-          'h-1',
-          variant === 'danger' && 'bg-[var(--color-error)]',
-          variant === 'warning' && 'bg-[var(--color-warning)]',
-          variant === 'info' && 'bg-[var(--color-theme-accent)]'
-        )}
-      />
-      <div className="p-6">
-        <AlertDialogPrimitive.Title className="font-[var(--book-title-font)] text-2xl tracking-[0.1em] text-text-primary">
-          {title}
-        </AlertDialogPrimitive.Title>
-        <AlertDialogPrimitive.Description className="mt-2 text-sm leading-relaxed text-text-secondary">
-          {description}
-        </AlertDialogPrimitive.Description>
-        {children}
-      </div>
-    </AlertDialogPrimitive.Content>
-  </AlertDialogPrimitive.Portal>
-))
+>(({ title, description, variant = 'info', className, children, ...props }, ref) => {
+  const activity = useOverlayActivity(props.onCloseAutoFocus)
+  if (!activity.active) return null
+  return (
+    <AlertDialogPrimitive.Portal>
+      <AlertDialogPrimitive.Overlay className="fixed inset-0 z-[1095] bg-[var(--ui-overlay-bg)]" />
+      <AlertDialogPrimitive.Content
+        ref={ref}
+        className={cn(contentClasses, 'z-[1096] max-w-md overflow-hidden', className)}
+        data-variant={variant}
+        {...props}
+        onCloseAutoFocus={activity.onCloseAutoFocus}
+      >
+        <div
+          className={cn(
+            'h-1',
+            variant === 'danger' && 'bg-[var(--color-error)]',
+            variant === 'warning' && 'bg-[var(--color-warning)]',
+            variant === 'info' && 'bg-[var(--color-theme-accent)]'
+          )}
+        />
+        <div className="p-6">
+          <AlertDialogPrimitive.Title className="font-[var(--book-title-font)] text-2xl tracking-[0.1em] text-text-primary">
+            {title}
+          </AlertDialogPrimitive.Title>
+          <AlertDialogPrimitive.Description className="mt-2 text-sm leading-relaxed text-text-secondary">
+            {description}
+          </AlertDialogPrimitive.Description>
+          {children}
+        </div>
+      </AlertDialogPrimitive.Content>
+    </AlertDialogPrimitive.Portal>
+  )
+})
 AlertDialogContent.displayName = 'AlertDialogContent'
 
 export const Popover = PopoverPrimitive.Root
@@ -167,19 +196,24 @@ export const PopoverClose = PopoverPrimitive.Close
 export const PopoverContent = React.forwardRef<
   React.ElementRef<typeof PopoverPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
->(({ className, sideOffset = 8, ...props }, ref) => (
-  <PopoverPrimitive.Portal>
-    <PopoverPrimitive.Content
-      ref={ref}
-      sideOffset={sideOffset}
-      className={cn(
-        'z-[1090] w-72 rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] p-4 text-sm text-text-primary shadow-[var(--ui-floating-shadow)] focus:outline-none',
-        className
-      )}
-      {...props}
-    />
-  </PopoverPrimitive.Portal>
-))
+>(({ className, sideOffset = 8, ...props }, ref) => {
+  const activity = useOverlayActivity(props.onCloseAutoFocus)
+  if (!activity.active) return null
+  return (
+    <PopoverPrimitive.Portal>
+      <PopoverPrimitive.Content
+        ref={ref}
+        sideOffset={sideOffset}
+        className={cn(
+          'z-[1090] w-72 rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] p-4 text-sm text-text-primary shadow-[var(--ui-floating-shadow)] focus:outline-none',
+          className
+        )}
+        {...props}
+        onCloseAutoFocus={activity.onCloseAutoFocus}
+      />
+    </PopoverPrimitive.Portal>
+  )
+})
 PopoverContent.displayName = 'PopoverContent'
 
 export const DropdownMenu = DropdownMenuPrimitive.Root
@@ -200,19 +234,24 @@ DropdownMenuSeparator.displayName = 'DropdownMenuSeparator'
 export const DropdownMenuContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
->(({ className, sideOffset = 8, ...props }, ref) => (
-  <DropdownMenuPrimitive.Portal>
-    <DropdownMenuPrimitive.Content
-      ref={ref}
-      sideOffset={sideOffset}
-      className={cn(
-        'z-[1090] min-w-44 rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] p-1.5 text-sm text-text-primary shadow-[var(--ui-floating-shadow)] focus:outline-none',
-        className
-      )}
-      {...props}
-    />
-  </DropdownMenuPrimitive.Portal>
-))
+>(({ className, sideOffset = 8, ...props }, ref) => {
+  const activity = useOverlayActivity(props.onCloseAutoFocus)
+  if (!activity.active) return null
+  return (
+    <DropdownMenuPrimitive.Portal>
+      <DropdownMenuPrimitive.Content
+        ref={ref}
+        sideOffset={sideOffset}
+        className={cn(
+          'z-[1090] min-w-44 rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] p-1.5 text-sm text-text-primary shadow-[var(--ui-floating-shadow)] focus:outline-none',
+          className
+        )}
+        {...props}
+        onCloseAutoFocus={activity.onCloseAutoFocus}
+      />
+    </DropdownMenuPrimitive.Portal>
+  )
+})
 DropdownMenuContent.displayName = 'DropdownMenuContent'
 
 export const DropdownMenuItem = React.forwardRef<
@@ -237,19 +276,23 @@ export const TooltipTrigger = TooltipPrimitive.Trigger
 export const TooltipContent = React.forwardRef<
   React.ElementRef<typeof TooltipPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>
->(({ className, sideOffset = 6, ...props }, ref) => (
-  <TooltipPrimitive.Portal>
-    <TooltipPrimitive.Content
-      ref={ref}
-      sideOffset={sideOffset}
-      className={cn(
-        'z-[1091] max-w-xs rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] px-3 py-1.5 text-xs text-text-primary shadow-[var(--ui-floating-shadow)]',
-        className
-      )}
-      {...props}
-    />
-  </TooltipPrimitive.Portal>
-))
+>(({ className, sideOffset = 6, ...props }, ref) => {
+  const active = useRouteActive()
+  if (!active) return null
+  return (
+    <TooltipPrimitive.Portal>
+      <TooltipPrimitive.Content
+        ref={ref}
+        sideOffset={sideOffset}
+        className={cn(
+          'z-[1091] max-w-xs rounded border border-[var(--book-ink-line)] bg-[var(--ui-floating-bg)] px-3 py-1.5 text-xs text-text-primary shadow-[var(--ui-floating-shadow)]',
+          className
+        )}
+        {...props}
+      />
+    </TooltipPrimitive.Portal>
+  )
+})
 TooltipContent.displayName = 'TooltipContent'
 
 export const Tabs = TabsPrimitive.Root

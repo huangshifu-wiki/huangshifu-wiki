@@ -4,7 +4,7 @@ ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 WORKDIR /app
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl gnupg openssl \
+  && apt-get install -y --no-install-recommends ca-certificates curl gpg openssl \
   && install -d /usr/share/postgresql-common/pgdg \
   && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
     | gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg \
@@ -12,21 +12,24 @@ RUN apt-get update \
     > /etc/apt/sources.list.d/pgdg.list \
   && apt-get update \
   && apt-get install -y --no-install-recommends postgresql-client-16 \
+  && apt-get purge -y --auto-remove gpg \
   && rm -rf /var/lib/apt/lists/*
 
 FROM base AS deps
 
 ARG NPM_REGISTRY=https://registry.npmjs.org
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci --registry="${NPM_REGISTRY}"
 
 FROM base AS prod-deps
 
 ARG NPM_REGISTRY=https://registry.npmjs.org
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 COPY prisma ./prisma
 RUN npm ci --omit=dev --registry="${NPM_REGISTRY}"
 RUN npm run db:generate
+COPY scripts/prune-docker-deps.mjs ./scripts/prune-docker-deps.mjs
+RUN node scripts/prune-docker-deps.mjs
 
 FROM base AS builder
 

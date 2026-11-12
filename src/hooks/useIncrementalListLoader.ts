@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRouteActive } from '../lib/routeActivity'
 
 interface IncrementalPageResult<T> {
   items: T[]
@@ -31,6 +32,9 @@ export function useIncrementalListLoader<T>({
   getItemKey,
   preserveItemsOnReset = false,
 }: UseIncrementalListLoaderOptions<T>) {
+  const active = useRouteActive()
+  const activeRef = useRef(active)
+  activeRef.current = active
   const [items, setItems] = useState<T[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
@@ -160,15 +164,16 @@ export function useIncrementalListLoader<T>({
   }, [loadPage])
 
   useEffect(() => {
-    if (!enabled || !autoLoadEnabled || !hasMore || loadingInitial || loadingMore) return
+    if (!active || !enabled || !autoLoadEnabled || !hasMore || loadingInitial || loadingMore) return
     if (typeof IntersectionObserver === 'undefined') return
 
     const sentinel = sentinelRef.current
     if (!sentinel) return
 
+    let connected = true
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
+        if (activeRef.current && connected && entries.some((entry) => entry.isIntersecting)) {
           loadMore()
         }
       },
@@ -176,8 +181,11 @@ export function useIncrementalListLoader<T>({
     )
 
     observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [autoLoadEnabled, enabled, hasMore, loadMore, loadingInitial, loadingMore])
+    return () => {
+      connected = false
+      observer.disconnect()
+    }
+  }, [active, autoLoadEnabled, enabled, hasMore, loadMore, loadingInitial, loadingMore])
 
   const isInitialLoading = enabled && completedInitialKeyRef.current !== loadKey
 

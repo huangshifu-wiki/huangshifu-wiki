@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useRouteActive } from '../lib/routeActivity'
 import { useSearchParams } from 'react-router-dom'
 import type {
   WikiItem,
@@ -79,6 +80,7 @@ function getPendingGalleryIds(state: SearchState) {
   return Array.from(ids)
 }
 export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
+  const active = useRouteActive()
   const [searchParams, setSearchParams] = useSearchParams()
   const initialQuery = searchParams.get('q') || ''
   const urlIncludeDetail = searchParams.get('detail') === '1'
@@ -213,7 +215,7 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
   const hasPendingGalleryThumbnails = getPendingGalleryIds(state).length > 0
 
   useEffect(() => {
-    if (!hasPendingGalleryThumbnails) return
+    if (!active || !hasPendingGalleryThumbnails) return
     const abortController = new AbortController()
     let attempts = 0
     let stopped = false
@@ -292,7 +294,7 @@ export function useSearchPage(options?: { hotKeywordsEnabled?: boolean }) {
         window.clearTimeout(timeoutId)
       }
     }
-  }, [hasPendingGalleryThumbnails])
+  }, [active, hasPendingGalleryThumbnails])
 
   // 搜索建议 -- 委托给 traditionalSearch.getSuggestions()
   const fetchSuggestions = useCallback(

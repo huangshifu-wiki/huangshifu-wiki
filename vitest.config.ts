@@ -75,6 +75,12 @@ export default defineConfig({
           setupFiles: ['./tests/unit/setup.ts', './tests/unit/setup-jsdom.ts'],
           include: ['tests/unit/*.test.tsx', 'tests/unit/components/**/*.test.tsx'],
           testTimeout: 30000,
+          // 编辑器的 ESM 入口包含无扩展名导入，交由 Vite 统一解析。
+          server: {
+            deps: {
+              inline: [/@uiw\/react-md-editor/],
+            },
+          },
           deps: {
             optimizer: {
               client: {

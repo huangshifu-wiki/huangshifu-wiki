@@ -59,6 +59,12 @@
 
 百科、帖子、图集和盘票的后台列表直接复用前台路由编辑器，通过公开 slug 打开编辑。后台来源保存完成后失效当前管理列表缓存并返回原分页、筛选和 hash；现有草稿续编分支保留弹窗，取消不刷新列表。
 
+图标统一从 `src/components/icons.ts` 导入。该入口使用 lucide-react 1.x 的公共
+`lucide-react/icons/<图标名>` 单图标子路径和 `lucide-react/types` 类型出口，不依赖
+`dist` 内部文件或引入整套图标。现有业务名称保留原图形对应关系（例如 `CheckCircle` 为
+`circle-check-big`，`CheckCircle2` 为 `circle-check`）；Vite 将实际使用的图标合并到
+`vendor-icons` 共享块，页面仍按路由懒加载，无需额外预打包整个图标库。
+
 ## 关键配置
 
 | 文件                             | 说明                        |

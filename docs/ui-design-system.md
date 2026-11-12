@@ -47,6 +47,8 @@
 
 嵌套操作复用 Dialog/AlertDialog 的焦点与滚动管理，Escape 只关闭当前内层交互，草稿留在外层。受控子弹窗没有 DialogTrigger 时，打开前记录焦点，关闭后显式恢复仍在页面中的触发元素。地图 SDK 延迟返回时核对挂载批次，避免向旧容器创建实例。`/__ui` 的“浮层与导航”提供弹窗内菜单、提示、子弹窗和底部标签候选组合示例。
 
+页面保留边界的通用活跃上下文只表达可见性，不包含业务数据。页面非活跃时，Dialog、AlertDialog、Popover、DropdownMenu、Tooltip 与 FullscreenSurface 不挂载 Portal、滚动锁和焦点陷阱，也不把焦点交还隐藏触发器；Root 的打开状态和页面持有的表单草稿继续保留。恢复页面重新显示仍打开的浮层，主动关闭仍按原规则恢复焦点。浮层内需保留的字段使用页面持有的受控状态。`/__ui` 的“页面保留示例”可切换隐藏与恢复，检查外部交互与草稿。
+
 ## 变体与 Token
 
 Button 变体固定为 `primary`、`secondary`、`ghost`、`danger`、`warning`、`success`、`info`，尺寸固定为 `sm`、`md`、`lg`。`soft` 修饰符提供浅色底 + 语义文字色的轻量按钮（用于列表行内操作），对 `secondary`、`danger`、`warning`、`success`、`info` 生效，`primary` 与 `ghost` 下等同原样式。颜色必须来自 `src/index.css` 的 CSS 变量或主题语义类，UI 内部禁止十六进制、RGB、HSL 字面量。

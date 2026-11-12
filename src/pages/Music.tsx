@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useUserPreferences } from '../context/UserPreferencesContext'
+import { useRouteActive } from '../lib/routeActivity'
 import { useMusic } from '../context/MusicContext'
 import { clsx } from 'clsx'
 import { useToast } from '../components/Toast'
@@ -30,6 +31,7 @@ import type { AlbumListResponse, MusicListResponse } from '../types/api'
 const MUSIC_PAGE_SIZE_OPTIONS = [25, 50, 100]
 
 const Music = () => {
+  const active = useRouteActive()
   const [searchParams, setSearchParams] = useSearchParams()
   const [songs, setSongs] = useState<SongItem[]>([])
   const [songTotalState, setSongTotal] = useState<{ scope: string; total: number }>()
@@ -166,7 +168,7 @@ const Music = () => {
   const playableSongs = useMemo(() => visibleSongs.filter(isPlayableSong), [visibleSongs])
 
   useEffect(() => {
-    if (!isIncrementalMode) return
+    if (!active || !isIncrementalMode) return
     // 没有分页参数时不导航，避免增量刷新覆盖刚提交的筛选条件。
     if (
       !searchParams.has('musicPage') &&
@@ -184,9 +186,10 @@ const Music = () => {
       },
       { replace: true }
     )
-  }, [isIncrementalMode, searchParams, setSearchParams])
+  }, [active, isIncrementalMode, searchParams, setSearchParams])
 
   useEffect(() => {
+    if (!active) return
     if (tabParam && tabParam !== 'albums') {
       setSearchParams(
         (prev) => {
@@ -197,7 +200,7 @@ const Music = () => {
         { replace: true }
       )
     }
-  }, [setSearchParams, tabParam])
+  }, [active, setSearchParams, tabParam])
 
   const handleTabChange = (tab: 'music' | 'albums') => {
     setSearchParams((prev) => {
@@ -242,8 +245,8 @@ const Music = () => {
   }, [fetchSongPage, isIncrementalMode, musicPagination.page, songRetryNonce, songScope])
 
   useEffect(() => {
-    setPlaylist(visibleSongs)
-  }, [setPlaylist, visibleSongs])
+    if (active) setPlaylist(visibleSongs)
+  }, [active, setPlaylist, visibleSongs])
 
   useEffect(() => {
     if (isIncrementalMode) return

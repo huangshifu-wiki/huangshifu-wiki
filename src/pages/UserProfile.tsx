@@ -17,6 +17,7 @@ import Pagination from '../components/Pagination'
 import { useToast } from '../components/Toast'
 import { useAuth } from '../context/AuthContext'
 import { useRoutedPagination } from '../hooks/useRoutedPagination'
+import { useRouteActive } from '../lib/routeActivity'
 import { apiGet, apiPatch } from '../lib/apiClient'
 import { formatMusicCredits } from '../lib/musicCredits'
 import { PROFILE_SIGNATURE_MAX_LENGTH } from '../lib/contentLimits'
@@ -135,6 +136,7 @@ function ProfileActivityList({
 }
 
 export default function UserProfile() {
+  const active = useRouteActive()
   const { user: authUser, refreshAuth } = useAuth()
   const toast = useToast()
   const { userId, tab } = useParams<{ userId?: string; tab?: string }>()
@@ -435,7 +437,7 @@ export default function UserProfile() {
   ])
 
   useEffect(() => {
-    if (!userId || activeTab !== 'galleries' || !hasPendingGalleryThumbnails) {
+    if (!active || !userId || activeTab !== 'galleries' || !hasPendingGalleryThumbnails) {
       return
     }
 
@@ -482,6 +484,7 @@ export default function UserProfile() {
       }
     }
   }, [
+    active,
     activeTab,
     contentScope,
     hasPendingGalleryThumbnails,

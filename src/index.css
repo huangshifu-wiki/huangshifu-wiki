@@ -1219,8 +1219,13 @@ html {
 }
 
 /* 管理后台为整屏内部滚动布局，视口不滚动，关闭预留轨道避免双重滚动条 */
-html:has(.admin-shell) {
+html:has([data-route-shell='admin'][data-route-active='true'] .admin-shell) {
   scrollbar-gutter: auto;
+}
+
+[data-route-shell][hidden],
+[data-retained-page][hidden] {
+  display: none !important;
 }
 
 /* 滚动条样式 */
@@ -1356,11 +1361,11 @@ a[href]:not([data-press-feedback='none']),
   }
 }
 
-.gufeng-fade-in {
+.gufeng-fade-in:not([data-route-entered]) {
   animation: gufengFadeIn 0.4s ease forwards;
 }
 
-.gufeng-song-item {
+.gufeng-song-item:not([data-route-entered]) {
   animation: gufengFadeIn 0.3s ease forwards;
 }
 
@@ -1479,7 +1484,10 @@ a[href]:not([data-press-feedback='none']),
   width: min(1100px, 100%);
   margin-inline: auto;
   padding: 2.5rem 1.5rem calc(env(safe-area-inset-bottom) + 8rem);
-  /* 只能用 backwards：both/forwards 会留下常驻 transform，容器内的 fixed 后代将不再以视口定位 */
+}
+
+.mobile-page-container:not([data-route-entered]) {
+  /* backwards 不留下会影响 fixed 后代的常驻 transform。 */
   animation: book-page-enter 0.48s ease backwards;
 }
 
@@ -1759,9 +1767,9 @@ a[href]:not([data-press-feedback='none']),
   letter-spacing: 0.08em;
 }
 
-.mobile-grid > *,
-.space-y-3 > *,
-.space-y-4 > * {
+.mobile-grid > :not([data-route-entered]),
+.space-y-3 > :not([data-route-entered]),
+.space-y-4 > :not([data-route-entered]) {
   animation: book-item-enter 0.42s ease backwards;
 }
 
@@ -1989,6 +1997,9 @@ a[href]:not([data-press-feedback='none']),
   position: relative;
   padding: 2rem;
   text-align: center;
+}
+
+.home-hero-content:not([data-route-entered]) {
   animation: home-hero-in 1.2s ease backwards;
 }
 
@@ -2000,6 +2011,9 @@ a[href]:not([data-press-feedback='none']),
   letter-spacing: 0.18em;
   line-height: 1.1;
   text-shadow: var(--home-title-shadow);
+}
+
+.home-hero-title:not([data-route-entered]) {
   animation: home-hero-in 1.2s ease 0.35s backwards;
 }
 
@@ -2009,6 +2023,9 @@ a[href]:not([data-press-feedback='none']),
   font-size: clamp(0.85rem, 2vw, 1.05rem);
   font-weight: 300;
   letter-spacing: 0.35em;
+}
+
+.home-hero-subtitle:not([data-route-entered]) {
   animation: home-hero-in 1.2s ease 0.5s backwards;
 }
 
@@ -2017,6 +2034,9 @@ a[href]:not([data-press-feedback='none']),
   flex-wrap: wrap;
   justify-content: center;
   gap: 1rem;
+}
+
+.home-hero-actions:not([data-route-entered]) {
   animation: home-hero-in 1.2s ease 0.65s backwards;
 }
 

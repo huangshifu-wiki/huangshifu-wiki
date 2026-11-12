@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { apiGet } from '../lib/apiClient'
 import type { AdminReviewQueueCountResponse } from '../types/api'
+import { useRouteActive } from '../lib/routeActivity'
 
 export const PENDING_REVIEW_COUNT_PATH = '/api/admin/review-queue/count'
 
@@ -11,6 +12,9 @@ export function notifyPendingReviewCountChanged() {
 }
 
 export function usePendingReviewCount(enabled: boolean) {
+  const active = useRouteActive()
+  const requestedTick = useRef<number | null>(null)
+  const requestIdRef = useRef(0)
   const [count, setCount] = useState(0)
   const [refreshTick, setRefreshTick] = useState(0)
 
@@ -28,10 +32,14 @@ export function usePendingReviewCount(enabled: boolean) {
   useEffect(() => {
     if (!enabled) {
       setCount(0)
+      requestedTick.current = null
+      requestIdRef.current += 1
       return
     }
 
-    let cancelled = false
+    if (!active || requestedTick.current === refreshTick) return
+    requestedTick.current = refreshTick
+    const requestId = ++requestIdRef.current
 
     const fetchCount = async () => {
       try {
@@ -41,23 +49,15 @@ export function usePendingReviewCount(enabled: boolean) {
           { staleTime: 15000, swr: true }
         )
 
-        if (!cancelled) {
-          setCount(data.total)
-        }
+        if (requestId === requestIdRef.current) setCount(data.total)
       } catch (error) {
         console.error('Fetch pending review count failed:', error)
-        if (!cancelled) {
-          setCount(0)
-        }
+        if (requestId === requestIdRef.current) setCount(0)
       }
     }
 
     void fetchCount()
-
-    return () => {
-      cancelled = true
-    }
-  }, [enabled, refreshTick])
+  }, [active, enabled, refreshTick])
 
   return count
 }

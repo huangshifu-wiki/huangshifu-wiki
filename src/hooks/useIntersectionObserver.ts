@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useRouteActive } from '../lib/routeActivity'
 
 export interface UseIntersectionObserverOptions {
   threshold?: number | number[]
@@ -29,6 +30,7 @@ export interface UseIntersectionObserverReturn {
 export function useIntersectionObserver(
   options: UseIntersectionObserverOptions = {}
 ): UseIntersectionObserverReturn {
+  const active = useRouteActive()
   const {
     threshold = 0,
     root = null,
@@ -47,6 +49,8 @@ export function useIntersectionObserver(
   const ref = externalRef || internalRef
 
   useEffect(() => {
+    if (!active || (triggerOnce && hasIntersected)) return
+    let connected = true
     const element = ref.current
     if (!element) return
 
@@ -57,6 +61,7 @@ export function useIntersectionObserver(
 
     observerRef.current = new IntersectionObserver(
       ([entry]) => {
+        if (!connected) return
         setEntry(entry)
         setIsIntersecting(entry.isIntersecting)
 
@@ -75,11 +80,12 @@ export function useIntersectionObserver(
     observerRef.current.observe(element)
 
     return () => {
+      connected = false
       if (observerRef.current) {
         observerRef.current.disconnect()
       }
     }
-  }, [threshold, root, rootMargin, triggerOnce, ref])
+  }, [active, hasIntersected, threshold, root, rootMargin, triggerOnce, ref])
 
   return { isIntersecting, hasIntersected, entry, ref }
 }
@@ -91,10 +97,13 @@ export function useAboveTheFold(options: Omit<UseIntersectionObserverOptions, 'r
   isAboveTheFold: boolean
   ref: React.RefObject<HTMLElement | null>
 } {
+  const active = useRouteActive()
   const [isAboveTheFold, setIsAboveTheFold] = useState(false)
   const ref = useRef<HTMLElement>(null)
 
   useEffect(() => {
+    if (!active) return
+    let connected = true
     const element = ref.current
     if (!element) return
 
@@ -112,6 +121,7 @@ export function useAboveTheFold(options: Omit<UseIntersectionObserverOptions, 'r
     // 使用 Intersection Observer 持续监测
     const observer = new IntersectionObserver(
       ([entry]) => {
+        if (!connected) return
         if (entry.isIntersecting) {
           setIsAboveTheFold(true)
         }
@@ -133,10 +143,11 @@ export function useAboveTheFold(options: Omit<UseIntersectionObserverOptions, 'r
     window.addEventListener('scroll', handleScroll, { passive: true })
 
     return () => {
+      connected = false
       observer.disconnect()
       window.removeEventListener('scroll', handleScroll)
     }
-  }, [options.threshold])
+  }, [active, options.threshold])
 
   return { isAboveTheFold, ref }
 }
@@ -173,64 +184,54 @@ export function useBatchLazyLoad(
   loadStates: boolean[]
   setItemRef: (index: number) => (el: HTMLElement | null) => void
 } {
+  const active = useRouteActive()
   const [loadStates, setLoadStates] = useState<boolean[]>(() => Array(itemCount).fill(false))
-  const observersRef = useRef<Map<number, IntersectionObserver>>(new Map())
-  const elementsRef = useRef<Map<number, HTMLElement>>(new Map())
-
-  const setItemRef = useCallback(
-    (index: number) => (el: HTMLElement | null) => {
-      if (!el) {
-        // 清理已移除元素的 observer
-        const existingObserver = observersRef.current.get(index)
-        if (existingObserver) {
-          const existingElement = elementsRef.current.get(index)
-          if (existingElement) {
-            existingObserver.unobserve(existingElement)
-          }
-          observersRef.current.delete(index)
-          elementsRef.current.delete(index)
-        }
-        return
-      }
-
-      elementsRef.current.set(index, el)
-
+  const statesRef = useRef(loadStates)
+  statesRef.current = loadStates
+  const observersRef = useRef(new Map<number, IntersectionObserver>())
+  const elementsRef = useRef(new Map<number, HTMLElement>())
+  const { threshold = 0, root = null, rootMargin = '50px' } = options
+  const observeItem = useCallback(
+    (index: number, element: HTMLElement) => {
+      if (!active || statesRef.current[index] || observersRef.current.has(index)) return
       const observer = new IntersectionObserver(
         ([entry]) => {
-          if (entry.isIntersecting) {
-            setLoadStates((prev) => {
-              const newStates = [...prev]
-              newStates[index] = true
-              return newStates
-            })
-
-            // 加载后取消观察
-            observer.unobserve(el)
-            observersRef.current.delete(index)
-          }
+          if (observersRef.current.get(index) !== observer || !entry.isIntersecting) return
+          setLoadStates((previous) => {
+            const next = [...previous]
+            next[index] = true
+            return next
+          })
+          observer.disconnect()
+          observersRef.current.delete(index)
         },
-        { threshold: 0, rootMargin: '50px', ...options }
+        { threshold, root, rootMargin }
       )
-
-      observer.observe(el)
       observersRef.current.set(index, observer)
+      observer.observe(element)
     },
-    [options]
+    [active, threshold, root, rootMargin]
   )
-
-  // 清理所有 observers
+  const setItemRef = useCallback(
+    (index: number) => (element: HTMLElement | null) => {
+      observersRef.current.get(index)?.disconnect()
+      observersRef.current.delete(index)
+      if (!element) {
+        elementsRef.current.delete(index)
+        return
+      }
+      elementsRef.current.set(index, element)
+      observeItem(index, element)
+    },
+    [observeItem]
+  )
   useEffect(() => {
+    elementsRef.current.forEach((element, index) => observeItem(index, element))
     return () => {
-      observersRef.current.forEach((observer, index) => {
-        const element = elementsRef.current.get(index)
-        if (element) {
-          observer.unobserve(element)
-        }
-      })
+      observersRef.current.forEach((observer) => observer.disconnect())
       observersRef.current.clear()
-      elementsRef.current.clear()
     }
-  }, [])
+  }, [observeItem])
 
   return { loadStates, setItemRef }
 }

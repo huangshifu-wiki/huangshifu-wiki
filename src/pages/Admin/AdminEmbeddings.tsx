@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useRouteActive } from '../../lib/routeActivity'
 import {
   AlertTriangle,
   BarChart3,
@@ -159,6 +160,7 @@ const getSourceLabel = (error: EmbeddingsError) => {
 }
 
 const AdminEmbeddings = () => {
+  const active = useRouteActive()
   const [status, setStatus] = useState<EmbeddingsStatus | null>(null)
   const [errors, setErrors] = useState<EmbeddingsError[]>([])
   const [loading, setLoading] = useState(true)
@@ -235,7 +237,7 @@ const AdminEmbeddings = () => {
   }, [showErrors, selectedType])
 
   useEffect(() => {
-    if (!status) return
+    if (!active || !status) return
     const summary = normalizeSummary(status.summary)
     let hasProcessing =
       summary.gallery.processing > 0 || summary.wiki.processing > 0 || summary.post.processing > 0
@@ -255,7 +257,7 @@ const AdminEmbeddings = () => {
       fetchStatus()
     }, 30000)
     return () => clearInterval(interval)
-  }, [status])
+  }, [active, status])
 
   const handleEnqueueMissing = async () => {
     setActionLoading('enqueue')

@@ -1,6 +1,7 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { UNSAFE_NavigationContext, type NavigateOptions, type To } from 'react-router-dom'
 import { useDialog } from '../components/Dialog'
+import { useRouteActive } from '../lib/routeActivity'
 
 /**
  * 未保存变更离开守卫。
@@ -265,6 +266,7 @@ function unregisterInstance(instance: GuardInstance): void {
 }
 
 export function useUnsavedChangesGuard(when: boolean): UnsavedChangesGuard {
+  const active = useRouteActive()
   // 测试等场景可能在 Router 外渲染组件：无 navigator 时跳过站内导航拦截，
   // 仅保留 beforeunload 与哨兵能力
   const navigation = useContext(UNSAFE_NavigationContext)
@@ -274,10 +276,11 @@ export function useUnsavedChangesGuard(when: boolean): UnsavedChangesGuard {
 
   // 拦截判定读取 ref 中的实时脏状态，保存后 markClean 同步生效
   useLayoutEffect(() => {
-    isDirtyRef.current = when
+    isDirtyRef.current = when && active
   })
 
   useEffect(() => {
+    if (!active) return
     registerInstance(instance, navigation?.navigator ?? null, confirm)
     syncActivation()
     return () => {
@@ -285,7 +288,7 @@ export function useUnsavedChangesGuard(when: boolean): UnsavedChangesGuard {
       syncActivation()
     }
     // when 翻转时重新同步激活：挂载时页面尚未脏，激活必须由脏状态变化驱动
-  }, [instance, navigation, confirm, when])
+  }, [active, instance, navigation, confirm, when])
 
   const markClean = useCallback(() => {
     isDirtyRef.current = false

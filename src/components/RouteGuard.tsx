@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useRouteActive } from '../lib/routeActivity'
 
 interface RouteGuardProps {
   children: ReactNode
@@ -41,16 +42,18 @@ export const RouteGuard = ({
 }: RouteGuardProps) => {
   const { user, isAdmin, isBanned, loading, ensureInitialized } = useAuth()
   const location = useLocation()
+  const active = useRouteActive()
 
   useEffect(() => {
     void ensureInitialized()
   }, [ensureInitialized])
 
-  if (loading) {
+  if (loading && active) {
     return <LoadingState />
   }
 
   if (!user) {
+    if (!active) return null
     const redirect = encodeURIComponent(`${location.pathname}${location.search}${location.hash}`)
     return <Navigate to={`/login?redirect=${redirect}`} replace />
   }

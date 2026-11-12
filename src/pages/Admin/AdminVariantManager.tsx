@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { useRouteActive } from '../../lib/routeActivity'
 import {
   RefreshCw,
   Image,
@@ -59,6 +60,7 @@ interface RebuildResponse {
 }
 
 export const AdminVariantManager: React.FC = () => {
+  const active = useRouteActive()
   const [variantStats, setVariantStats] = useState<VariantStats | null>(null)
   const [cleanupStats, setCleanupStats] = useState<CleanupStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -102,9 +104,13 @@ export const AdminVariantManager: React.FC = () => {
 
   useEffect(() => {
     fetchStats()
+  }, [fetchStats])
+
+  useEffect(() => {
+    if (!active) return
     const interval = setInterval(fetchStats, 30000)
     return () => clearInterval(interval)
-  }, [fetchStats])
+  }, [active, fetchStats])
 
   const handleRebuildVariants = async (scope: string) => {
     const actionLabel =

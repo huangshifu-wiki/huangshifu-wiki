@@ -8,6 +8,7 @@ import {
   SupportedImageFormat,
 } from '../utils/imageFormat'
 import { useIntersectionObserver } from '../hooks/useIntersectionObserver'
+import { useRouteActive } from '../lib/routeActivity'
 
 export interface SmartImageProps {
   image?: ImageMap | string | null | undefined
@@ -118,6 +119,7 @@ export const SmartImage: React.FC<SmartImageProps> = ({
   enableBlurTransition = true,
   useOriginal = false,
 }) => {
+  const active = useRouteActive()
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
   const [blurhashDataUrl, setBlurhashDataUrl] = useState<string | null>(null)
@@ -165,7 +167,7 @@ export const SmartImage: React.FC<SmartImageProps> = ({
 
   // 自动检测首屏
   useEffect(() => {
-    if (fetchpriority !== 'auto-detect') return
+    if (!active || fetchpriority !== 'auto-detect') return
 
     const checkAboveTheFold = () => {
       if (!containerRef.current) return
@@ -185,7 +187,7 @@ export const SmartImage: React.FC<SmartImageProps> = ({
 
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
-  }, [fetchpriority])
+  }, [active, fetchpriority])
 
   // 计算实际的 loading 和 fetchpriority
   const { actualLoading, actualFetchPriority } = useMemo(() => {
