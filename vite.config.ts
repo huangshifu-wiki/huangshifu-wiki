@@ -72,6 +72,7 @@ export default defineConfig(({ mode }) => {
 
               if (pkg === 'echarts' || pkg.startsWith('echarts/')) return 'vendor-echarts'
               if (pkg === 'vis-network' || pkg.startsWith('vis-network/')) return 'vendor-vis'
+              // icons/* 公共入口继续合并为共享块，仅包含应用实际导入的图标。
               if (pkg === 'lucide-react' || pkg.startsWith('lucide-react/')) return 'vendor-icons'
               if (['motion', 'motion-dom', 'motion-utils', 'framer-motion'].includes(pkg)) {
                 return 'vendor-motion'
