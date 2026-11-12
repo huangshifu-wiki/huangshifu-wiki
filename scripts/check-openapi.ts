@@ -116,8 +116,9 @@ function collectRoutes(): Operation[] {
     if (item.type !== 'VariableDeclarator' || node(item.id)?.type !== 'ObjectPattern') return
     const init = node(item.init)
     const awaited = init?.type === 'AwaitExpression' ? node(init.argument) : init
-    if (awaited?.type !== 'CallExpression' || node(awaited.callee)?.type !== 'Import') return
-    const module = literal(nodes(awaited.arguments)[0])
+    // Babel 8 将动态 import() 表示为 ImportExpression，模块路径位于 source。
+    if (awaited?.type !== 'ImportExpression') return
+    const module = literal(awaited.source)
     if (!module) throw new Error(`${location('server.ts', item)}: 不支持动态模块表达式`)
     if (!module.startsWith('.')) return
     for (const property of nodes(node(item.id).properties)) {
