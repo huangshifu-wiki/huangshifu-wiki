@@ -102,7 +102,7 @@
   },
   "devDependencies": {
     "@amap/amap-jsapi-types": "^0.0.15",
-    "@babel/parser": "^7.29.13",
+    "@babel/parser": "^8.1.0",
     "@redocly/cli": "^2.75.0",
     "@tailwindcss/vite": "^4.3.4",
     "@tanstack/react-virtual": "^3.14.25",

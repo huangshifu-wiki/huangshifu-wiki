@@ -41,6 +41,8 @@ npm run format
 npm run verify
 ```
 
+`npm run check:openapi` 使用 Babel 8 AST 静态扫描路由（包括条件分支内的动态导入），核对 OpenAPI 与 Markdown 文档覆盖；不会加载路由模块或连接数据库。
+
 安全相关或依赖变更还应运行：
 
 ```bash
