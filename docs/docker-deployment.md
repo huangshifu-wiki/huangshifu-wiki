@@ -139,6 +139,14 @@ SECRETS_ENCRYPTION_KEY="<上一步的输出>"
 **注意**：该密钥用于加密存储的服务凭证，更换会导致已保存的凭证无法解密（需在面板重新配置）。
 升级前若 S3 / 微信等凭证仅在旧 `.env` 中，迁移到面板后请删除旧变量以免混淆。
 
+### 3.2 Prisma 7 运行配置
+
+CLI、Client 和 `@prisma/adapter-pg` 固定为同一版本 7.10.1。镜像构建阶段复制 `prisma.config.ts` 后生成客户端，不需要构建期数据库或连接串；运行镜像也保留该配置，供 `db:deploy`、`db:seed` 使用。连接串仍由容器环境变量提供，生产环境不加载 `.env.local`。仅升级 Prisma 运行时无需新增或重置数据库迁移。
+
+应用单例继续使用 `DB_CONNECTION_LIMIT`（默认 CPU 核数 × 2 + 1）和 `DB_POOL_TIMEOUT`（默认 10 秒）。脚本和测试客户端沿用 `DATABASE_URL` 的 `connection_limit`、`pool_timeout`；URL 的 `schema` 同时用于 ORM 和原始 SQL。池等待超时和建立连接超时分别配置，后者由 `connect_timeout` 控制，默认 5 秒；值为 0 表示不设超时。空闲连接默认 300 秒回收，可用 `max_idle_connection_lifetime` 覆盖；`max_connection_lifetime` 继续以秒配置。
+
+远程 PostgreSQL 的 TLS 证书由 pg 校验；使用自签名证书时配置可信 CA（如 `NODE_EXTRA_CA_CERTS`），不要关闭全局证书校验。
+
 ## 4. 启用图片语义搜索
 
 如需定制模型缓存路径，编辑 `.env`：

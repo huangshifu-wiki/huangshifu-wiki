@@ -10,7 +10,7 @@ export function buildLegacyDuplicateWikiTitleKey(title: string, slug: string) {
 
 function targetIncludesField(target: unknown, field: 'slug' | 'titleKey') {
   if (Array.isArray(target)) {
-    return target.includes(field)
+    return target.some((value) => value === field || value === `"${field}"`)
   }
 
   if (typeof target === 'string') {
@@ -20,17 +20,24 @@ function targetIncludesField(target: unknown, field: 'slug' | 'titleKey') {
   return false
 }
 
-export function getWikiUniqueConflictMessage(error: unknown) {
-  const maybePrismaError = error as {
-    code?: string
-    meta?: { target?: unknown }
-  }
+function getErrorProperty(value: unknown, key: string): unknown {
+  if (!value || typeof value !== 'object' || !(key in value)) return undefined
+  return Reflect.get(value, key)
+}
 
-  if (maybePrismaError.code !== 'P2002') {
+export function getWikiUniqueConflictMessage(error: unknown) {
+  if (getErrorProperty(error, 'code') !== 'P2002') {
     return null
   }
 
-  const target = maybePrismaError.meta?.target
+  // pg adapter 将约束放在 cause 中；target 仍是 Prisma 公开错误接口的一部分。
+  const meta = getErrorProperty(error, 'meta')
+  const adapterError = getErrorProperty(meta, 'driverAdapterError')
+  const constraint = getErrorProperty(getErrorProperty(adapterError, 'cause'), 'constraint')
+  const target =
+    getErrorProperty(constraint, 'fields') ??
+    getErrorProperty(constraint, 'index') ??
+    getErrorProperty(meta, 'target')
   if (targetIncludesField(target, 'titleKey')) {
     return WIKI_TITLE_CONFLICT_MESSAGE
   }

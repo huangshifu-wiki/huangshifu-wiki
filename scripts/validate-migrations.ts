@@ -319,12 +319,6 @@ function validateSchemaFile(schemaPath: string): ValidationResult[] {
       code: 'INVALID_PROVIDER',
     },
     {
-      pattern: /url\s*=\s*env\(/,
-      name: '环境变量 URL 配置',
-      required: true,
-      code: 'MISSING_ENV_URL',
-    },
-    {
       pattern: /provider\s*=\s*["']?prisma-client-js["']?/,
       name: 'Prisma Client 生成器配置',
       required: true,
@@ -345,6 +339,20 @@ function validateSchemaFile(schemaPath: string): ValidationResult[] {
     } else if (check.pattern.test(content)) {
       console.log(colorize(`  ✓ ${check.name} 正确`, 'green'))
     }
+  }
+  const configPath = join(schemaPath, '..', '..', 'prisma.config.ts')
+  if (
+    !existsSync(configPath) ||
+    !/datasource\s*:\s*\{[\s\S]*?\burl\s*:/.test(readFileSync(configPath, 'utf-8'))
+  ) {
+    results.push({
+      level: 'error',
+      message: 'Prisma Config 缺少 datasource.url 配置',
+      file: configPath,
+      code: 'MISSING_CONFIG_URL',
+      suggestion:
+        '在 prisma.config.ts 的 datasource.url 中读取 DATABASE_URL，不要放回 schema.prisma',
+    })
   }
 
   // 统计模型数量

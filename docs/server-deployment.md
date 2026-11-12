@@ -8,7 +8,7 @@
 | -------- | --------------------------------------------------------------- |
 | 前端     | Vite 6 + React 19 + TypeScript + Tailwind CSS 4                 |
 | 后端     | Express（`server.ts`）                                          |
-| 数据库   | Prisma 6.x + PostgreSQL 18                                      |
+| 数据库   | Prisma 7.10.1 + PostgreSQL 18                                   |
 | 运行时   | Node.js 22                                                      |
 | 向量检索 | Qdrant + ChineseCLIP（`OFA-Sys/chinese-clip-vit-base-patch16`） |
 | 进程守护 | PM2                                                             |
@@ -388,12 +388,11 @@ npm run db:deploy
 npm run db:seed
 ```
 
-> **Prisma 版本注意**：本项目使用 Prisma 6.x，不支持 7.x。若报 `prisma: not found` 或 schema 错误，重新安装：
+> **Prisma 版本注意**：CLI `prisma`、`@prisma/client` 和 PostgreSQL 适配器 `@prisma/adapter-pg` 统一使用 7.10.1，请用 `npm ci` 按锁文件安装，不要单独升级其中一个包。
 >
-> ```bash
-> npm install prisma@^6.7.0 @prisma/client@^6.7.0
-> npx prisma --version  # 应显示 6.x
-> ```
+> 连接串和种子命令在根目录 `prisma.config.ts` 配置，不能再把 `url` 放入 `schema.prisma`。CLI 优先保留进程环境变量；开发环境依次读取 `.env.local`、`.env`，生产环境只读取 `.env`。`db:generate` 不需要数据库连接，迁移和种子命令需要真实的 `DATABASE_URL`。
+>
+> Prisma 7 的 `db:migrate` 和 `db:push` 不会自动生成客户端或运行种子；结构变更后显式执行 `npm run db:generate`，需要初始化默认数据时再执行 `npm run db:seed`。
 
 ### 5.1 验证数据库表
 
@@ -658,7 +657,7 @@ pm2 save
 ```bash
 cd /root/huangshifu-wiki
 npm install --registry=https://registry.npmmirror.com
-npx prisma --version  # 确认是 6.x
+npx prisma --version  # CLI 与 Client 均应为 7.10.1
 npm run db:generate
 ```
 

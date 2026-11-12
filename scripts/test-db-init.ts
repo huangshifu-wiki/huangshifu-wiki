@@ -87,11 +87,15 @@ function getExecErrorMessage(error: unknown): string {
 
 function runPrismaCommand(
   args: string[],
-  options?: { stdio?: 'inherit' | 'pipe'; input?: string }
+  options?: { stdio?: 'inherit' | 'pipe'; input?: string; databaseUrl?: string }
 ) {
   execFileSync(npxCommand, ['prisma', ...args], {
     cwd: path.resolve(__dirname, '..'),
-    env: process.env,
+    env: {
+      ...process.env,
+      NODE_ENV: 'test',
+      ...(options?.databaseUrl ? { DATABASE_URL: options.databaseUrl } : {}),
+    },
     stdio: options?.stdio ?? 'inherit',
     input: options?.input,
   })
@@ -120,8 +124,9 @@ function createDatabaseIfNotExists() {
     const escapedDatabaseName = dbConfig.database.replace(/"/g, '""')
 
     console.log(`📝 创建数据库 "${dbConfig.database}"（若不存在）...`)
-    runPrismaCommand(['db', 'execute', '--stdin', '--url', dbConfig.adminUrl], {
+    runPrismaCommand(['db', 'execute', '--stdin'], {
       stdio: 'pipe',
+      databaseUrl: dbConfig.adminUrl,
       input: `CREATE DATABASE "${escapedDatabaseName}";`,
     })
     console.log(`✅ 数据库 "${dbConfig.database}" 创建成功\n`)

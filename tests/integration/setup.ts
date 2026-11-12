@@ -10,7 +10,8 @@
 
 import { beforeAll, afterAll, beforeEach } from 'vitest'
 import dotenv from 'dotenv'
-import { PrismaClient, type User } from '@prisma/client'
+import type { User } from '@prisma/client'
+import { createPrismaClient } from '../../src/server/prismaClient'
 import type { SignOptions } from 'jsonwebtoken'
 import { getPasswordSaltRounds } from '../../src/server/utils/password'
 import { allocateUserPublicId } from '../../src/server/utils/userPublicId'
@@ -66,13 +67,7 @@ if (!verboseIntegrationLogging) {
 }
 
 // 创建 Prisma 客户端实例（用于测试数据库操作）
-export const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL,
-    },
-  },
-})
+export const prisma = createPrismaClient()
 
 let testNumericSlugCounter = Date.now() * 1000
 

@@ -24,6 +24,7 @@ import { execFileSync } from 'child_process'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import readline from 'readline'
+import { createPrismaClient } from '../src/server/prismaClient'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -117,8 +118,7 @@ async function truncateAllTables() {
     // 使用 Prisma 的 executeRaw 来清空所有表
     // 注意：这需要按依赖顺序清空表
 
-    const { PrismaClient } = await import('@prisma/client')
-    const prisma = new PrismaClient()
+    const prisma = createPrismaClient()
 
     // 获取所有表名
     const tables: Array<{ tablename: string }> = await prisma.$queryRaw`
