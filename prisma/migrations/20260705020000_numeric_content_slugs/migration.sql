@@ -1,5 +1,7 @@
 -- 统一公开内容 URL：每个栏目按创建时间递增生成数字 slug。
 
+BEGIN;
+
 ALTER TABLE "Post" ADD COLUMN "slug" TEXT;
 ALTER TABLE "Gallery" ADD COLUMN "slug" TEXT;
 ALTER TABLE "MusicTrack" ADD COLUMN "slug" TEXT;
@@ -296,3 +298,5 @@ ALTER TABLE "WikiLike"
 ALTER TABLE "WikiDislike"
   ADD CONSTRAINT "WikiDislike_pageSlug_fkey"
   FOREIGN KEY ("pageSlug") REFERENCES "WikiPage"("slug") ON DELETE CASCADE ON UPDATE CASCADE;
+
+COMMIT;
