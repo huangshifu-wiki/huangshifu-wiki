@@ -1,7 +1,9 @@
+import { Profiler } from 'react'
 import { act, render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { Lightbox } from '../../src/components/Lightbox'
 import MusicDetail from '../../src/pages/MusicDetail'
 import AlbumDetail from '../../src/pages/AlbumDetail'
 import { MusicProvider } from '../../src/context/MusicContext'
@@ -32,6 +34,25 @@ function incoming(path: string) {
 }
 
 describe('音乐封面查看', () => {
+  it('从关闭状态打开第三张时只挂载目标原图', () => {
+    const sources = new Set<string>()
+    const images = ['a', 'b', 'c'].map((id) => ({ id, url: id }))
+    const viewer = (open: boolean, initialIndex: number) => (
+      <Profiler
+        id="lightbox"
+        onRender={() => {
+          const src = document.querySelector('[role="dialog"] img')?.getAttribute('src')
+          if (src) sources.add(src)
+        }}
+      >
+        <Lightbox open={open} images={images} initialIndex={initialIndex} onClose={() => {}} />
+      </Profiler>
+    )
+    const view = render(viewer(false, 0))
+    view.rerender(viewer(true, 2))
+    expect([...sources]).toEqual(['c'])
+  })
+
   it.each([
     ['song', 'b', ['a', 'b', 'c', 'a'], ['a', 'b', 'c'], 1],
     ['album', 'b', ['a', 'b', 'c', 'a'], ['a', 'b', 'c'], 1],

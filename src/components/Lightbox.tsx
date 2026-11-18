@@ -39,6 +39,8 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
   activeRef.current = active
   const presence = useFloatingPresence(open)
   const [activeIndex, setActiveIndex] = useState(initialIndex)
+  const openingIndex = open ? initialIndex : null
+  const [previousOpeningIndex, setPreviousOpeningIndex] = useState(openingIndex)
   const [pixelScale, setPixelScale] = useState(1)
   const [translateX, setTranslateX] = useState(0)
   const [translateY, setTranslateY] = useState(0)
@@ -68,6 +70,12 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
   const initialPinchDistance = useRef(0)
   const initialPinchScale = useRef(1)
 
+  // 在提交 img.src 前同步打开位置，避免浏览器请求上次查看的图片。
+  if (openingIndex !== previousOpeningIndex) {
+    setPreviousOpeningIndex(openingIndex)
+    if (openingIndex !== null) setActiveIndex(openingIndex)
+  }
+
   const activeImage = images[activeIndex]
   const currentImageUrl = activeImage?.originalUrl || activeImage?.url || ''
 
@@ -83,7 +91,6 @@ export const Lightbox = ({ open, images, initialIndex, onClose }: LightboxProps)
 
   useLayoutEffect(() => {
     if (!open) return
-    setActiveIndex(initialIndex)
     resetImageState()
   }, [initialIndex, open, resetImageState])
 
